@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/*.log
+*.log
+
+# Data (ChromaDB persistence)
+data/chromadb/
+
+# Modelos descargados (se descargan automáticamente)
+models/*.pth
+models/*.bin
+*.onnx
+
+# Audio temporal
+*.wav
+*.mp3
+*.ogg
+*.flac
+!voice_samples/*.wav
+!voice_samples/*.ogg
+!voice_samples/*.mp3
+
+# Cache de HuggingFace/Torch
+.cache/
+*.cache
+
+# Configuración local
+.env
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
