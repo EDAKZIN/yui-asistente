@@ -1,5 +1,6 @@
 # Yui AI Assistant - Dependencias
 # Creado por EDAKZIN
+# Versión: 1.1.0
 
 # ⚠️ IMPORTANTE: Instalar PyTorch con CUDA primero:
 # pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
@@ -7,7 +8,7 @@
 # Core
 python-dotenv>=1.0.0
 
-# STT - Whisper con GPU
+# STT - Whisper con GPU (modelo "small" recomendado)
 git+https://github.com/openai/whisper.git
 
 # LLM - Llama 3.2 3B con HuggingFace
@@ -18,7 +19,7 @@ bitsandbytes>=0.41.0
 # TTS - Coqui XTTS v2
 coqui-tts>=0.27.0
 
-# Memoria - ChromaDB
+# Memoria - ChromaDB (selectiva)
 chromadb>=0.4.0
 sentence-transformers>=2.2.0
 
@@ -29,6 +30,9 @@ numpy>=1.22.0
 
 # Utilities
 colorlog>=6.7.0
+
+# Voice Commands - Abrir aplicaciones
+AppOpener>=1.7
 
 # Whisper dependencies
 tiktoken

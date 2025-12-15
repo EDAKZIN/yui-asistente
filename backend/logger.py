@@ -52,19 +52,17 @@ class YuiLogger:
         console_handler.setFormatter(console_formatter)
         cls.logger.addHandler(console_handler)
         
-        # Handler para archivo - LIMPIO en cada inicio
+        # === LOG PRINCIPAL (conversaciones) ===
         log_file_path = log_path / 'yui.log'
-        
-        # Limpiar log anterior al iniciar nueva sesión
         if log_file_path.exists():
-            log_file_path.unlink()  # Eliminar log anterior
+            log_file_path.unlink()
         
         file_handler = logging.FileHandler(
             log_file_path,
-            mode='w',  # Modo escritura (sobrescribe)
+            mode='w',
             encoding='utf-8'
         )
-        file_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.INFO)  # Solo INFO y superior
         file_formatter = logging.Formatter(
             '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
@@ -72,10 +70,29 @@ class YuiLogger:
         file_handler.setFormatter(file_formatter)
         cls.logger.addHandler(file_handler)
         
+        # === LOG DEBUG (funcionamiento interno) ===
+        debug_file_path = log_path / 'yui_debug.log'
+        if debug_file_path.exists():
+            debug_file_path.unlink()
+        
+        debug_handler = logging.FileHandler(
+            debug_file_path,
+            mode='w',
+            encoding='utf-8'
+        )
+        debug_handler.setLevel(logging.DEBUG)  # TODO incluyendo DEBUG
+        debug_formatter = logging.Formatter(
+            '%(asctime)s.%(msecs)03d | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        debug_handler.setFormatter(debug_formatter)
+        cls.logger.addHandler(debug_handler)
+        
         cls._initialized = True
         cls.logger.info("=" * 60)
         cls.logger.info("Sistema de logging inicializado")
-        cls.logger.info(f"Logs guardados en: {log_path}")
+        cls.logger.info(f"Log conversaciones: {log_file_path}")
+        cls.logger.info(f"Log debug: {debug_file_path}")
         cls.logger.info("=" * 60)
         
         return cls.logger

@@ -4,17 +4,18 @@
 
 ## ✨ Características
 
-- 🎙️ **STT (Speech-to-Text)**: OpenAI Whisper con GPU
+- 🎙️ **STT (Speech-to-Text)**: OpenAI Whisper "small" con GPU
 - 🧠 **LLM**: Llama 3.2 3B con cuantización 4-bit (~2.5GB VRAM)
 - 🗣️ **TTS con clonación de voz**: Coqui XTTS v2
-- 💾 **Memoria persistente**: ChromaDB con búsqueda semántica
-- 🎭 **Personalidad única**: Dulce pero con actitud cuando bromean
+- 💾 **Memoria selectiva**: ChromaDB con filtrado inteligente
+- ⚡ **Comandos de voz**: Abrir apps, hora, fecha
+- 🎭 **Personalidad única**: Amigable por defecto, sarcástica si la provocan
 
 ## 🚀 Pipeline
 
 ```
-Usuario → Whisper → Llama 3.2 → XTTS v2 → Audio
-  habla    (GPU)     (4-bit)    (Navia)   (respuesta)
+Usuario → Whisper → Comandos/LLM → XTTS v2 → Audio
+  habla   (small)    (detecta)     (Navia)   (respuesta)
 ```
 
 ## 📋 Requisitos
@@ -35,6 +36,9 @@ cd yui-assistant
 python -m venv venv
 .\venv\Scripts\activate
 
+# Instalar PyTorch con CUDA primero
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
 # Instalar dependencias
 pip install -r requirements.txt
 ```
@@ -45,24 +49,39 @@ pip install -r requirements.txt
 .\venv\Scripts\python.exe backend\yui_assistant.py
 ```
 
-1. **Espera** a que carguen los modelos (~1-2 min primera vez)
+1. **Espera** a que carguen los modelos (~2-3 min primera vez)
 2. **Presiona Enter** para empezar a grabar
 3. **Habla** tu mensaje
 4. **Presiona Enter** para detener y procesar
 5. **Yui responde** con voz clonada
 
+## ⚡ Comandos de Voz
+
+| Comando | Ejemplo |
+|---------|---------|
+| Abrir apps | "Abre Chrome", "Abre Spotify" |
+| Hora | "¿Qué hora es?" |
+| Fecha | "¿Qué fecha es?", "¿Qué día es?" |
+
+**Aliases configurados:** Opera → Navegador Opera GX, VSCode → Visual Studio Code
+
 ## 📁 Estructura
 
 ```
-yui-assistant/
+yui-asistente/
 ├── backend/
 │   ├── yui_assistant.py    # Pipeline principal
 │   ├── whisper_stt.py      # Speech-to-Text
 │   ├── llama_llm.py        # LLM (Llama 3.2)
 │   ├── coqui_tts.py        # Text-to-Speech (XTTS v2)
-│   ├── memory_system.py    # Memoria (ChromaDB)
+│   ├── commands.py         # Comandos de voz
+│   ├── memory_system.py    # Memoria selectiva (ChromaDB)
+│   ├── logger.py           # Sistema de logging dual
 │   └── audio_manager.py    # Grabación/reproducción
 ├── voice_samples/          # Muestras de voz para clonación
+├── logs/
+│   ├── yui.log             # Log de conversaciones
+│   └── yui_debug.log       # Log de funcionamiento interno
 ├── data/chromadb/          # Base de datos de memoria
 ├── config.json             # Configuración
 └── requirements.txt        # Dependencias
@@ -83,7 +102,7 @@ Para cambiar la voz de Yui:
 ## ⚙️ Configuración
 
 Edita `config.json` para ajustar:
-- Modelo de Whisper (base, small, medium)
+- Modelo de Whisper (tiny, base, small, medium)
 - Idioma de reconocimiento
 - Parámetros del LLM
 
@@ -91,18 +110,33 @@ Edita `config.json` para ajustar:
 
 | Componente | Tecnología |
 |------------|------------|
-| STT | OpenAI Whisper |
+| STT | OpenAI Whisper (small) |
 | LLM | Llama 3.2 3B (HuggingFace) |
 | TTS | Coqui XTTS v2 |
 | Memoria | ChromaDB + Sentence Transformers |
+| Comandos | AppOpener |
 | Cuantización | bitsandbytes 4-bit |
 
 ## 📊 Rendimiento
 
-- **Tiempo de respuesta**: 10-25 segundos (incluye TTS)
+- **Tiempo de respuesta**: 15-30 segundos (incluye TTS)
 - **VRAM LLM**: ~2.5 GB
 - **VRAM XTTS**: ~1.5 GB
-- **Carga inicial**: ~2 minutos
+- **VRAM Whisper small**: ~0.5 GB
+- **Carga inicial**: ~2-3 minutos
+
+## 📝 Logs
+
+| Archivo | Contenido |
+|---------|-----------|
+| `logs/yui.log` | Conversaciones (INFO+) |
+| `logs/yui_debug.log` | Funcionamiento interno (DEBUG) |
+
+Los logs se reinician en cada ejecución.
+
+## 🔒 Seguridad
+
+Apps bloqueadas por seguridad: cmd, powershell, regedit, taskmgr, diskpart, y más.
 
 ## 📄 Licencia
 

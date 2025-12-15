@@ -73,9 +73,43 @@ class MemorySystem:
             logger.error("  Memoria deshabilitada, continuando sin ella")
             self.client = None
     
+    def should_save(self, user_message: str, assistant_response: str) -> bool:
+        """
+        Decide si una conversación vale la pena guardar
+        
+        Args:
+            user_message: Mensaje del usuario
+            assistant_response: Respuesta del asistente
+            
+        Returns:
+            True si debe guardarse
+        """
+        user_lower = user_message.lower().strip()
+        
+        # No guardar mensajes muy cortos (probablemente ruido)
+        if len(user_message) < 10:
+            return False
+        
+        # No guardar comandos simples
+        command_patterns = ['abre ', 'abrir ', 'qué hora', 'que hora', 'qué fecha', 'que fecha']
+        for pattern in command_patterns:
+            if pattern in user_lower:
+                return False
+        
+        # No guardar si parece basura/ruido de ASR
+        words = user_lower.split()
+        if len(words) < 2:
+            return False
+        
+        # No guardar si la respuesta es "no te entendí"
+        if "no te entendí" in assistant_response.lower() or "puedes repetir" in assistant_response.lower():
+            return False
+        
+        return True
+    
     def add_conversation(self, user_message: str, assistant_response: str):
         """
-        Almacena una conversación
+        Almacena una conversación si es relevante
         
         Args:
             user_message: Mensaje del usuario
@@ -83,6 +117,11 @@ class MemorySystem:
         """
         if self.client is None:
             return  # Memoria deshabilitada
+        
+        # Filtrar conversaciones no relevantes
+        if not self.should_save(user_message, assistant_response):
+            logger.debug(f"Conversación no guardada (no relevante): '{user_message[:30]}...'")
+            return
         
         try:
             # Crear ID único basado en timestamp
@@ -106,7 +145,7 @@ class MemorySystem:
                 }]
             )
             
-            logger.debug(f" Conversación guardada: {conversation_id}")
+            logger.info(f" Conversación guardada: {conversation_id}")
             
         except Exception as e:
             logger.error(f" Error al guardar conversación: {e}")

@@ -16,7 +16,9 @@ from whisper_stt import WhisperSTT
 from llama_llm import LlamaLLM
 from coqui_tts import CoquiTTS
 from memory_system import MemorySystem
+from commands import command_executor
 import logging
+import re
 
 class YuiAssistant:
     """Asistente de voz Yui - Pipeline completo"""
@@ -134,10 +136,10 @@ class YuiAssistant:
                 self.logger.warning("No se detectó habla")
                 return {"success": False, "error": "No speech detected"}
             
-            # 3. Generar respuesta con Llama
-            response_text = self.llama.generate_response(transcript)
+            # 3. Detectar si es un comando o conversación normal
+            response_text = self._process_transcript(transcript)
             
-            # 4. Sintetizar con pyttsx3 (ya reproduce directamente)
+            # 4. Sintetizar respuesta
             print(f"\n Yui: {response_text}\n")
             self.tts.synthesize(response_text)
             
@@ -156,6 +158,47 @@ class YuiAssistant:
         except Exception as e:
             self.logger.error(f"Error en pipeline: {e}")
             return {"success": False, "error": str(e)}
+    
+    def _process_transcript(self, transcript: str) -> str:
+        """
+        Procesa el transcript y detecta si es un comando o conversación
+        
+        Args:
+            transcript: Texto transcrito del usuario
+            
+        Returns:
+            Respuesta (del comando o del LLM)
+        """
+        text_lower = transcript.lower().strip()
+        
+        # Detectar comando "abre X" / "abrir X"
+        open_patterns = [
+            r'(?:abre|abrir|abrí|abreme|abrirme|ejecuta|ejecutar|inicia|iniciar)\s+(.+)',
+            r'(?:pon|poner|ponme)\s+(.+)',
+        ]
+        
+        for pattern in open_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                app_name = match.group(1).strip()
+                self.logger.info(f"Comando detectado: abrir '{app_name}'")
+                success, response = command_executor.open_app(app_name)
+                return response
+        
+        # Detectar "qué hora es"
+        if any(phrase in text_lower for phrase in ['qué hora', 'que hora', 'la hora', 'hora es']):
+            self.logger.info("Comando detectado: obtener hora")
+            _, response = command_executor.execute("get_time")
+            return response
+        
+        # Detectar "qué fecha es" / "qué día es"
+        if any(phrase in text_lower for phrase in ['qué fecha', 'que fecha', 'qué día', 'que día', 'que dia']):
+            self.logger.info("Comando detectado: obtener fecha")
+            _, response = command_executor.execute("get_date")
+            return response
+        
+        # No es un comando - usar LLM para conversación normal
+        return self.llama.generate_response(transcript)
     
     def run_interactive(self):
         """Modo interactivo continuo"""
@@ -234,25 +277,8 @@ def main():
         # Cargar modelos
         yui.load_models()
         
-        # Opción de configurar micrófono
-        print("\n¿Deseas configurar el micrófono?")
-        print("  1. Usar micrófono por defecto")
-        print("  2. Listar dispositivos y seleccionar")
-        mic_choice = input("\nOpción (1/2, Enter=1): ").strip()
-        
-        selected_device = None
-        if mic_choice == "2":
-            yui.audio_manager.list_devices()
-            try:
-                device_id = input("Ingresa el ID del micrófono (o Enter para default): ").strip()
-                if device_id:
-                    selected_device = int(device_id)
-                    print(f"  Usando dispositivo: {selected_device}")
-            except ValueError:
-                print("  ID inválido, usando dispositivo por defecto")
-        
-        # Guardar dispositivo seleccionado
-        yui.selected_mic = selected_device
+        # Usar micrófono por defecto
+        yui.selected_mic = None
         
         # Mostrar menú
         print("\nSelecciona un modo:")

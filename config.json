@@ -8,7 +8,7 @@
     },
     "models": {
         "whisper": {
-            "model_size": "base",
+            "model_size": "small",
             "language": "es",
             "compute_type": "float16"
         },
