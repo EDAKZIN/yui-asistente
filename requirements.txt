@@ -34,6 +34,8 @@ colorlog>=6.7.0
 # Voice Commands - Abrir aplicaciones
 AppOpener>=1.7
 
+# Web Search - Brave Search API (usa requests)
+
 # Whisper dependencies
 tiktoken
 numba

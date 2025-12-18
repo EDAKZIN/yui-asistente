@@ -197,6 +197,27 @@ class YuiAssistant:
             _, response = command_executor.execute("get_date")
             return response
         
+        # Detectar búsqueda web: "busca X", "qué es X", "quién es X"
+        search_patterns = [
+            r'(?:busca|búscame|investiga|dime sobre|háblame de|información sobre)\s+(.+)',
+            r'(?:qué|que) (?:es|son|significa|significa)\s+(.+)',
+            r'(?:quién|quien) (?:es|fue|era)\s+(.+)',
+        ]
+        
+        for pattern in search_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                query = match.group(1).strip().rstrip('.,!?')
+                self.logger.info(f"Comando detectado: buscar '{query}'")
+                success, search_results = command_executor.web_search(query)
+                
+                if success:
+                    # Pasar resultados al LLM para una respuesta natural
+                    prompt_with_context = f"Basándote en esta información de internet: {search_results}\n\nResponde brevemente a: {transcript}"
+                    return self.llama.generate_response(prompt_with_context, use_history=False)
+                else:
+                    return search_results
+        
         # No es un comando - usar LLM para conversación normal
         return self.llama.generate_response(transcript)
     

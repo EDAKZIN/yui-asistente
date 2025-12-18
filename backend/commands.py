@@ -8,6 +8,9 @@ import logging
 from datetime import datetime
 from typing import Tuple, Optional
 
+# SearxNG Search (reemplaza DuckDuckGo)
+from web_search import web_search as searx_web_search
+
 logger = logging.getLogger('Yui.Commands')
 
 # Lista negra de aplicaciones potencialmente peligrosas
@@ -146,12 +149,25 @@ class CommandExecutor:
                   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
         return f"Hoy es {now.day} de {months[now.month - 1]} de {now.year}"
     
+    def web_search(self, query: str) -> Tuple[bool, str]:
+        """
+        Busca información en internet usando SearxNG
+        
+        Args:
+            query: Consulta de búsqueda
+            
+        Returns:
+            Tupla (éxito, resultados resumidos)
+        """
+        logger.debug(f"web_search llamado con query: '{query}'")
+        return searx_web_search(query)
+    
     def execute(self, command_type: str, params: Optional[str] = None) -> Tuple[bool, str]:
         """
         Ejecuta un comando según su tipo
         
         Args:
-            command_type: Tipo de comando (open_app, get_time, get_date)
+            command_type: Tipo de comando (open_app, get_time, get_date, web_search)
             params: Parámetros del comando
             
         Returns:
@@ -163,6 +179,8 @@ class CommandExecutor:
             return True, self.get_time()
         elif command_type == "get_date":
             return True, self.get_date()
+        elif command_type == "web_search":
+            return self.web_search(params)
         else:
             return False, "No entendí ese comando"
 

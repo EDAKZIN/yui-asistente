@@ -8,7 +8,8 @@
 - 🧠 **LLM**: Llama 3.2 3B con cuantización 4-bit (~2.5GB VRAM)
 - 🗣️ **TTS con clonación de voz**: Coqui XTTS v2
 - 💾 **Memoria selectiva**: ChromaDB con filtrado inteligente
-- ⚡ **Comandos de voz**: Abrir apps, hora, fecha
+- ⚡ **Comandos de voz**: Abrir apps, hora, fecha, búsqueda web
+- 🔍 **Búsqueda web**: Brave Search API
 - 🎭 **Personalidad única**: Amigable por defecto, sarcástica si la provocan
 
 ## 🚀 Pipeline
@@ -41,7 +42,20 @@ pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # Instalar dependencias
 pip install -r requirements.txt
+
+# Configurar variables de entorno
+copy .env.example .env
+# Edita .env y agrega tu BRAVE_API_KEY
 ```
+
+### 🔑 Configurar Brave Search API
+
+1. Ve a [https://brave.com/search/api/](https://brave.com/search/api/)
+2. Crea una cuenta y obtén tu API key (plan Free: 2,000 consultas/mes)
+3. Edita `.env` y agrega tu key:
+   ```
+   BRAVE_API_KEY=BSA_xxxxxxxxxx
+   ```
 
 ## 🎮 Uso
 
@@ -62,6 +76,7 @@ pip install -r requirements.txt
 | Abrir apps | "Abre Chrome", "Abre Spotify" |
 | Hora | "¿Qué hora es?" |
 | Fecha | "¿Qué fecha es?", "¿Qué día es?" |
+| Búsqueda web | "Busca quién es el presidente de Perú" |
 
 **Aliases configurados:** Opera → Navegador Opera GX, VSCode → Visual Studio Code
 
@@ -75,6 +90,7 @@ yui-asistente/
 │   ├── llama_llm.py        # LLM (Llama 3.2)
 │   ├── coqui_tts.py        # Text-to-Speech (XTTS v2)
 │   ├── commands.py         # Comandos de voz
+│   ├── web_search.py       # Búsqueda web (Brave API)
 │   ├── memory_system.py    # Memoria selectiva (ChromaDB)
 │   ├── logger.py           # Sistema de logging dual
 │   └── audio_manager.py    # Grabación/reproducción
@@ -83,6 +99,8 @@ yui-asistente/
 │   ├── yui.log             # Log de conversaciones
 │   └── yui_debug.log       # Log de funcionamiento interno
 ├── data/chromadb/          # Base de datos de memoria
+├── .env                    # Variables de entorno (API keys)
+├── .env.example            # Ejemplo de variables de entorno
 ├── config.json             # Configuración
 └── requirements.txt        # Dependencias
 ```
@@ -113,6 +131,7 @@ Edita `config.json` para ajustar:
 | STT | OpenAI Whisper (small) |
 | LLM | Llama 3.2 3B (HuggingFace) |
 | TTS | Coqui XTTS v2 |
+| Búsqueda Web | Brave Search API |
 | Memoria | ChromaDB + Sentence Transformers |
 | Comandos | AppOpener |
 | Cuantización | bitsandbytes 4-bit |
