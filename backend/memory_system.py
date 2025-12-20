@@ -191,6 +191,135 @@ class MemorySystem:
             logger.error(f" Error al buscar contexto: {e}")
             return ""
     
+    def clean_repetitive_memories(self, phrase: str, max_occurrences: int = 2) -> int:
+        """
+        Limpia memorias que contienen una frase repetitiva
+        
+        Args:
+            phrase: Frase a buscar en las memorias
+            max_occurrences: Cuántas ocurrencias permitir (elimina el resto)
+        
+        Returns:
+            Número de memorias eliminadas
+        """
+        if self.client is None:
+            return 0
+        
+        try:
+            # Obtener todas las memorias
+            all_data = self.collection.get(include=["metadatas", "documents"])
+            
+            if not all_data['ids']:
+                return 0
+            
+            phrase_lower = phrase.lower()
+            matching_ids = []
+            
+            # Encontrar memorias que contienen la frase
+            for i, metadata in enumerate(all_data['metadatas']):
+                response = metadata.get('assistant_response', '').lower()
+                if phrase_lower in response:
+                    matching_ids.append((all_data['ids'][i], metadata.get('timestamp', '')))
+            
+            # Si hay más de max_occurrences, eliminar las más antiguas
+            if len(matching_ids) > max_occurrences:
+                # Ordenar por timestamp (más antiguos primero)
+                matching_ids.sort(key=lambda x: x[1])
+                
+                # IDs a eliminar (todos excepto los últimos max_occurrences)
+                ids_to_delete = [id for id, _ in matching_ids[:-max_occurrences]]
+                
+                # Eliminar de ChromaDB
+                self.collection.delete(ids=ids_to_delete)
+                
+                logger.info(f" Limpiadas {len(ids_to_delete)} memorias repetitivas con '{phrase[:30]}...'")
+                return len(ids_to_delete)
+            
+            return 0
+            
+        except Exception as e:
+            logger.error(f" Error limpiando memorias repetitivas: {e}")
+            return 0
+    
+    def _is_informative_response(self, response: str) -> bool:
+        """
+        Verifica si una respuesta contiene información valiosa que no debe perderse
+        
+        Args:
+            response: Respuesta del asistente
+            
+        Returns:
+            True si contiene información importante
+        """
+        response_lower = response.lower()
+        
+        # Palabras que indican información importante
+        protected_keywords = [
+            # Fechas y tiempo
+            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+            "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo",
+            "navidad", "año nuevo", "cumpleaños", "aniversario", "feriado", "festividad",
+            # Números específicos (indica respuesta calculada)
+            "son ", "es ", "resultado", "total", "suma", "resta",
+            # Datos personales/preferencias
+            "tu nombre", "te llamas", "te gusta", "prefieres", "favorito",
+            "recuerdo", "mencionaste", "dijiste",
+            # Información factual
+            "significa", "definición", "explicación", "porque",
+            "historia", "origen", "creador", "inventor",
+        ]
+        
+        for keyword in protected_keywords:
+            if keyword in response_lower:
+                return True
+        
+        # Si tiene números específicos (ej: "84", "100", "2025"), es informativa
+        import re
+        if re.search(r'\b\d{2,}\b', response):  # Números de 2+ dígitos
+            return True
+        
+        return False
+    
+    def auto_clean_if_repetitive(self, assistant_response: str):
+        """
+        Verifica si una respuesta es repetitiva y limpia automáticamente la memoria
+        SOLO limpia respuestas genéricas, NO información importante
+        
+        Args:
+            assistant_response: Respuesta del asistente a verificar
+        """
+        # Primero verificar si es una respuesta informativa (NO limpiar)
+        if self._is_informative_response(assistant_response):
+            logger.debug(f" Respuesta informativa protegida: '{assistant_response[:40]}...'")
+            return
+        
+        # Frases genéricas que si se repiten mucho, deben limpiarse
+        repetitive_phrases = [
+            "estoy cansada",
+            "estoy cansado", 
+            "no estoy segura de eso",
+            "no estoy seguro de eso",
+            "podrías repetir",
+            "dime qué necesitas",
+            "en qué puedo ayudarte",
+            "claro, dime",
+        ]
+        
+        response_lower = assistant_response.lower()
+        
+        # Solo limpiar si la respuesta es corta Y genérica
+        # Respuestas largas probablemente tienen información útil
+        if len(assistant_response) > 100:
+            return
+        
+        for phrase in repetitive_phrases:
+            if phrase in response_lower:
+                cleaned = self.clean_repetitive_memories(phrase, max_occurrences=1)
+                if cleaned > 0:
+                    logger.info(f" Auto-limpieza: eliminadas {cleaned} memorias genéricas con '{phrase}'")
+                break
+    
     def get_stats(self) -> Dict:
         """Obtiene estadísticas de la memoria"""
         if self.client is None:

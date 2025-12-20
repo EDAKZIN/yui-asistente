@@ -255,6 +255,37 @@ class YuiAssistant:
                 self.logger.error(f"Error en modo interactivo: {e}")
                 print(f" Error: {e}")
     
+    def run_continuous(self):
+        """Modo de escucha continua con VAD y wake word"""
+        try:
+            from continuous_listener import ContinuousListener
+            
+            # Obtener configuración de escucha
+            listen_config = self.config.get('listening', {})
+            
+            # Crear listener continuo
+            listener = ContinuousListener(
+                yui_assistant=self,
+                inactivity_timeout=listen_config.get('inactivity_timeout_seconds', 120),
+                vad_threshold=listen_config.get('vad_threshold', 0.5),
+                wake_word=listen_config.get('wake_word', 'hey_jarvis'),
+                wake_word_threshold=listen_config.get('wake_word_threshold', 0.5),
+                proactive_enabled=listen_config.get('proactive_comments_enabled', True),
+                max_proactive=listen_config.get('max_proactive_comments', 3)
+            )
+            
+            # Ejecutar en modo bloqueante
+            listener.run_blocking()
+            
+        except ImportError as e:
+            self.logger.error(f"Error importando módulos de escucha continua: {e}")
+            print(f"\nError: Faltan dependencias para escucha continua")
+            print(f"   Ejecuta: pip install openwakeword")
+        except Exception as e:
+            self.logger.error(f"Error en modo continuo: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def test_components(self):
         """Prueba cada componente individualmente"""
         print("\n" + "=" * 70)
@@ -303,11 +334,12 @@ def main():
         
         # Mostrar menú
         print("\nSelecciona un modo:")
-        print("  1. Modo interactivo (conversación continua)")
+        print("  1. Modo interactivo (presionar Enter para hablar)")
         print("  2. Prueba de componentes")
         print("  3. Una sola interacción")
+        print("  4. Escucha continua (VAD + wake word) [NUEVO]")
         
-        choice = input("\nOpción (1/2/3): ").strip()
+        choice = input("\nOpción (1/2/3/4): ").strip()
         
         if choice == "1":
             yui.run_interactive()
@@ -316,6 +348,8 @@ def main():
         elif choice == "3":
             print("\n Una sola interacción:")
             yui.process_voice_input(duration=None)
+        elif choice == "4":
+            yui.run_continuous()
         else:
             print("Opción no válida")
     

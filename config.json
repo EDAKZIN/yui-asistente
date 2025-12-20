@@ -8,7 +8,7 @@
     },
     "models": {
         "whisper": {
-            "model_size": "small",
+            "model_size": "medium",
             "language": "es",
             "compute_type": "float16"
         },
@@ -27,5 +27,19 @@
     "ui": {
         "theme": "dark",
         "show_transcripts": true
+    },
+    "listening": {
+        "mode": "continuous",
+        "inactivity_timeout_seconds": 120,
+        "proactive_comments_enabled": true,
+        "max_proactive_comments": 3,
+        "vad_threshold": 0.65,
+        "min_speech_duration": 0.5,
+        "min_silence_duration": 0.8,
+        "wake_word": "hey_jarvis",
+        "wake_word_threshold": 0.5
+    },
+    "gui": {
+        "mute_key": "|"
     }
 }

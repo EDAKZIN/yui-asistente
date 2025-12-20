@@ -47,16 +47,47 @@ BLOCKED_APPS = {
     'bcdedit', 'boot configuration',
 }
 
-# Aliases para nombres comunes de apps
+# Aliases para nombres comunes de apps (incluyendo errores de Whisper)
 APP_ALIASES = {
+    # Navegadores
     'opera': 'navegador opera gx',
     'opera gx': 'navegador opera gx',
     'operagx': 'navegador opera gx',
     'gx': 'navegador opera gx',
     'edge': 'microsoft edge',
+    'chrome': 'google chrome',
+    'firefox': 'mozilla firefox',
+    
+    # IDEs y editores
     'vs code': 'visual studio code',
     'vscode': 'visual studio code',
     'code': 'visual studio code',
+    'visual code': 'visual studio code',
+    
+    # Bloc de notas (errores comunes de Whisper)
+    'blog de notas': 'notepad',
+    'bloc de notas': 'notepad',
+    'b, l, o, c de notas': 'notepad',
+    'bloc': 'notepad',
+    'blog': 'notepad',
+    'notas': 'notepad',
+    'notepad': 'notepad',
+    
+    # Explorador de archivos
+    'explorador de archivos': 'explorer',
+    'el explorador de archivos': 'explorer',
+    'explorador': 'explorer',
+    'archivos': 'explorer',
+    
+    # Otras apps comunes
+    'calculadora': 'calculator',
+    'spotify': 'spotify',
+    'discord': 'discord',
+    'steam': 'steam',
+    'word': 'microsoft word',
+    'excel': 'microsoft excel',
+    'powerpoint': 'microsoft powerpoint',
+    'paint': 'paint',
 }
 
 

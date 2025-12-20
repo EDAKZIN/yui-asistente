@@ -71,7 +71,8 @@ class WhisperSTT:
             if np.abs(audio_data).max() > 1.0:
                 audio_data = audio_data / np.abs(audio_data).max()
             
-            # Transcribir con initial_prompt para guiar reconocimiento
+            # Transcribir con initial_prompt para guiar reconocimiento de Yui y EDAKZIN
+            # El filtro de alucinaciones abajo rechazará si Whisper repite el prompt en silencio
             result = self.model.transcribe(
                 audio_data,
                 language=self.language,
@@ -81,6 +82,45 @@ class WhisperSTT:
             )
             
             text = result["text"].strip()
+            
+            # Filtrar alucinaciones conocidas
+            text_lower = text.lower()
+            
+            # Patrón 1: Frases del prompt alucinadas
+            prompt_hallucinations = [
+                "yui es una asistente virtual",
+                "el usuario habla con yui",
+                "creada por edakzin",
+                "yui es conocido",
+                "yui es un trabajador",
+                "esfuerzos difíciles",
+                "en el compasión",
+                "creador de contenidos",
+            ]
+            
+            for phrase in prompt_hallucinations:
+                if phrase in text_lower:
+                    logger.warning(f" Alucinación detectada, ignorando: '{text[:50]}...'")
+                    return ""
+            
+            # Patrón 2: Caracteres no latinos (Whisper alucina coreano/chino/japonés)
+            import re
+            if re.search(r'[\u3000-\u9fff\uac00-\ud7af]', text):
+                logger.warning(f" Alucinación (caracteres asiáticos): '{text[:30]}...'")
+                return ""
+            
+            # Patrón 3: Repetición excesiva del mismo texto (signo de alucinación)
+            words = text_lower.split()
+            if len(words) > 5:
+                # Si una palabra se repite más de 3 veces en una oración corta
+                word_counts = {}
+                for word in words:
+                    if len(word) > 3:  # Solo palabras significativas
+                        word_counts[word] = word_counts.get(word, 0) + 1
+                for word, count in word_counts.items():
+                    if count > 3:
+                        logger.warning(f" Alucinación (repetición): '{text[:40]}...'")
+                        return ""
             
             if text:
                 logger.info(f" Transcripción: '{text}'")

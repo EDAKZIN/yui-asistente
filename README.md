@@ -4,19 +4,22 @@
 
 ## ✨ Características
 
-- 🎙️ **STT (Speech-to-Text)**: OpenAI Whisper "small" con GPU
+- 🎙️ **STT (Speech-to-Text)**: OpenAI Whisper "medium" con GPU
 - 🧠 **LLM**: Llama 3.2 3B con cuantización 4-bit (~2.5GB VRAM)
 - 🗣️ **TTS con clonación de voz**: Coqui XTTS v2
 - 💾 **Memoria selectiva**: ChromaDB con filtrado inteligente
 - ⚡ **Comandos de voz**: Abrir apps, hora, fecha, búsqueda web
 - 🔍 **Búsqueda web**: Brave Search API
 - 🎭 **Personalidad única**: Amigable por defecto, sarcástica si la provocan
+- 🖥️ **Interfaz gráfica**: GUI moderna con pywebview
+- ⏰ **Recordatorios**: Sistema de recordatorios por voz
+- 💬 **Comentarios proactivos**: Yui comenta cuando llevas tiempo sin hablar
 
 ## 🚀 Pipeline
 
 ```
 Usuario → Whisper → Comandos/LLM → XTTS v2 → Audio
-  habla   (small)    (detecta)     (Navia)   (respuesta)
+  habla   (medium)   (detecta)     (Navia)   (respuesta)
 ```
 
 ## 📋 Requisitos
@@ -59,15 +62,29 @@ copy .env.example .env
 
 ## 🎮 Uso
 
+### Modo GUI (Recomendado)
+```powershell
+.\venv\Scripts\python.exe run_gui.py
+```
+
+### Modo Consola
 ```powershell
 .\venv\Scripts\python.exe backend\yui_assistant.py
 ```
 
 1. **Espera** a que carguen los modelos (~2-3 min primera vez)
-2. **Presiona Enter** para empezar a grabar
-3. **Habla** tu mensaje
-4. **Presiona Enter** para detener y procesar
-5. **Yui responde** con voz clonada
+2. **Habla** diciendo "Yui" seguido de tu mensaje
+3. **Yui responde** con voz clonada
+
+## 🖥️ Interfaz Gráfica
+
+La GUI incluye:
+- **Estado visual**: Indica si Yui está activa, escuchando, procesando, etc.
+- **Transcripción en vivo**: Muestra lo que Yui escucha
+- **Respuesta de Yui**: Muestra la respuesta generada
+- **Botones de control**: Silenciar, modo reposo, configuración
+- **Tecla de silencio personalizable**: Configurable desde ajustes
+- **Indicador de silencio**: Muestra claramente cuando el mic está apagado
 
 ## ⚡ Comandos de Voz
 
@@ -77,8 +94,24 @@ copy .env.example .env
 | Hora | "¿Qué hora es?" |
 | Fecha | "¿Qué fecha es?", "¿Qué día es?" |
 | Búsqueda web | "Busca quién es el presidente de Perú" |
+| Recordatorios | "Recuérdame en 5 minutos revisar el correo" |
+| Alarmas | "Pon una alarma para 2 minutos" |
 
 **Aliases configurados:** Opera → Navegador Opera GX, VSCode → Visual Studio Code
+
+## ⏰ Sistema de Recordatorios
+
+Yui puede configurar recordatorios con lenguaje natural:
+
+- "Yui, recuérdame en 5 minutos pararme"
+- "Pon una alarma para 2 minutos"
+- "Hazme un recordatorio en 30 segundos de revisar el celular"
+- "Timer para 10 minutos"
+
+Soporta:
+- Números escritos: "en dos minutos", "en cinco segundos"
+- Números dígitos: "en 5 minutos", "en 30 segundos"
+- Horas, minutos, segundos
 
 ## 📁 Estructura
 
@@ -92,8 +125,17 @@ yui-asistente/
 │   ├── commands.py         # Comandos de voz
 │   ├── web_search.py       # Búsqueda web (Brave API)
 │   ├── memory_system.py    # Memoria selectiva (ChromaDB)
+│   ├── continuous_listener.py # Escucha continua con VAD
+│   ├── vad_listener.py     # Voice Activity Detection
+│   ├── state_machine.py    # Máquina de estados
+│   ├── reminders.py        # Sistema de recordatorios
+│   ├── gui_api.py          # API para la GUI
 │   ├── logger.py           # Sistema de logging dual
 │   └── audio_manager.py    # Grabación/reproducción
+├── ui/
+│   ├── index.html          # Interfaz HTML
+│   ├── styles.css          # Estilos CSS
+│   └── app.js              # Lógica frontend
 ├── voice_samples/          # Muestras de voz para clonación
 ├── logs/
 │   ├── yui.log             # Log de conversaciones
@@ -102,6 +144,7 @@ yui-asistente/
 ├── .env                    # Variables de entorno (API keys)
 ├── .env.example            # Ejemplo de variables de entorno
 ├── config.json             # Configuración
+├── run_gui.py              # Lanzador de GUI
 └── requirements.txt        # Dependencias
 ```
 
@@ -123,25 +166,29 @@ Edita `config.json` para ajustar:
 - Modelo de Whisper (tiny, base, small, medium)
 - Idioma de reconocimiento
 - Parámetros del LLM
+- Tecla de silencio (sección `gui`)
+- Comentarios proactivos (sección `listening`)
 
 ## 🛠️ Stack Tecnológico
 
 | Componente | Tecnología |
 |------------|------------|
-| STT | OpenAI Whisper (small) |
+| STT | OpenAI Whisper (medium) |
 | LLM | Llama 3.2 3B (HuggingFace) |
 | TTS | Coqui XTTS v2 |
+| VAD | Silero VAD |
 | Búsqueda Web | Brave Search API |
 | Memoria | ChromaDB + Sentence Transformers |
 | Comandos | AppOpener |
 | Cuantización | bitsandbytes 4-bit |
+| GUI | pywebview |
 
 ## 📊 Rendimiento
 
-- **Tiempo de respuesta**: 15-30 segundos (incluye TTS)
+- **Tiempo de respuesta**: 10-20 segundos (incluye TTS)
 - **VRAM LLM**: ~2.5 GB
 - **VRAM XTTS**: ~1.5 GB
-- **VRAM Whisper small**: ~0.5 GB
+- **VRAM Whisper medium**: ~1 GB
 - **Carga inicial**: ~2-3 minutos
 
 ## 📝 Logs

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yui - AI Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header con estado -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-text">Yui</span>
+                <span class="version">v1.0</span>
+            </div>
+            <div class="status-group">
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span class="status-text" id="statusText">Cargando...</span>
+                </div>
+                <div class="mute-indicator" id="muteIndicator" style="display: none;">
+                    <span class="mute-icon">🔇</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Panel principal -->
+        <main class="main-content">
+            <!-- Visualizador de audio/estado -->
+            <div class="audio-visualizer" id="audioVisualizer">
+                <div class="waveform" id="waveform">
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                </div>
+                <div class="state-icon" id="stateIcon">
+                    <svg viewBox="0 0 24 24" class="mic-icon" id="micIcon">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                        <path
+                            d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Transcripción en vivo -->
+            <div class="transcript-panel">
+                <div class="transcript-header">
+                    <span>Transcripción</span>
+                    <button class="btn-clear" id="btnClearTranscript" title="Limpiar">✕</button>
+                </div>
+                <div class="transcript-content" id="transcriptContent">
+                    <p class="transcript-placeholder">Esperando audio...</p>
+                </div>
+            </div>
+
+            <!-- Respuesta de Yui -->
+            <div class="response-panel">
+                <div class="response-header">
+                    <span>Yui</span>
+                </div>
+                <div class="response-content" id="responseContent">
+                    <p class="response-placeholder">...</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Controles -->
+        <footer class="controls">
+            <button class="btn-control btn-mute" id="btnMute" title="Silenciar/Activar micrófono">
+                <svg viewBox="0 0 24 24" class="control-icon" id="muteIcon">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                    <path
+                        d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                </svg>
+                <span class="btn-label">Silenciar</span>
+            </button>
+
+            <button class="btn-control btn-sleep" id="btnSleep" title="Modo reposo">
+                <svg viewBox="0 0 24 24" class="control-icon">
+                    <path
+                        d="M12.34 2.02C6.59 1.82 2 6.42 2 12c0 5.52 4.48 10 10 10 3.71 0 6.93-2.02 8.66-5.02-7.51-.25-12.09-8.43-8.32-14.96z" />
+                </svg>
+                <span class="btn-label">Reposo</span>
+            </button>
+
+            <button class="btn-control btn-settings" id="btnSettings" title="Configuración">
+                <svg viewBox="0 0 24 24" class="control-icon">
+                    <path
+                        d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                </svg>
+                <span class="btn-label">Config</span>
+            </button>
+        </footer>
+    </div>
+
+    <!-- Modal de configuración -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Configuración</h2>
+                <button class="btn-close" id="btnCloseSettings">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label>Tecla de Mute</label>
+                    <div class="keybind-input" id="muteKeybind">
+                        <span id="currentMuteKey">...</span>
+                        <button class="btn-change-key" id="btnChangeMuteKey">Cambiar</button>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label>Umbral VAD</label>
+                    <input type="range" id="vadThreshold" min="0.3" max="0.9" step="0.05" value="0.65">
+                    <span id="vadThresholdValue">0.65</span>
+                </div>
+                <div class="setting-group">
+                    <label>Comentarios Proactivos</label>
+                    <label class="switch">
+                        <input type="checkbox" id="proactiveEnabled" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
