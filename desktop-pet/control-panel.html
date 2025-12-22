@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yui - AI Assistant</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Yui - Panel de Control</title>
+    <link rel="stylesheet" href="control-panel.css">
 </head>
 
 <body>
@@ -19,7 +19,7 @@
             <div class="status-group">
                 <div class="status-indicator" id="statusIndicator">
                     <span class="status-dot" id="statusDot"></span>
-                    <span class="status-text" id="statusText">Cargando...</span>
+                    <span class="status-text" id="statusText">Conectando...</span>
                 </div>
                 <div class="mute-indicator" id="muteIndicator" style="display: none;">
                     <span class="mute-icon">🔇</span>
@@ -131,7 +131,13 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Indicador de conexión -->
+    <div class="connection-status" id="connectionStatus">
+        <span class="connection-dot"></span>
+        <span class="connection-text">Desconectado</span>
+    </div>
+
+    <script src="dist/control-panel.js"></script>
 </body>
 
 </html>

@@ -11,7 +11,7 @@
 - ⚡ **Comandos de voz**: Abrir apps, hora, fecha, búsqueda web
 - 🔍 **Búsqueda web**: Brave Search API
 - 🎭 **Personalidad única**: Amigable por defecto, sarcástica si la provocan
-- 🖥️ **Interfaz gráfica**: GUI moderna con pywebview
+- 🖥️ **Desktop Pet**: Mascota Live2D con Electron + Panel de Control
 - ⏰ **Recordatorios**: Sistema de recordatorios por voz
 - 💬 **Comentarios proactivos**: Yui comenta cuando llevas tiempo sin hablar
 
@@ -25,12 +25,14 @@ Usuario → Whisper → Comandos/LLM → XTTS v2 → Audio
 ## 📋 Requisitos
 
 - Python 3.11+
+- Node.js 18+ (para Electron)
 - NVIDIA GPU con CUDA (RTX 3060 o superior recomendado)
-- ~8GB VRAM total durante ejecución
+- ~8GB VRAM total durante ejecucion
 - Windows 10/11
 
-## 🔧 Instalación
+## 🔧 Instalacion
 
+### Backend (Python)
 ```powershell
 # Clonar repositorio
 git clone https://github.com/EDAKZIN/yui-assistant.git
@@ -43,12 +45,20 @@ python -m venv venv
 # Instalar PyTorch con CUDA primero
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 
-# Instalar dependencias
+# Instalar dependencias Python
 pip install -r requirements.txt
 
 # Configurar variables de entorno
 copy .env.example .env
 # Edita .env y agrega tu BRAVE_API_KEY
+```
+
+### Frontend (Electron)
+```powershell
+# Instalar dependencias de Electron
+cd desktop-pet
+npm install
+cd ..
 ```
 
 ### 🔑 Configurar Brave Search API
@@ -62,29 +72,31 @@ copy .env.example .env
 
 ## 🎮 Uso
 
-### Modo GUI (Recomendado)
+### Modo Desktop Pet + Panel de Control (Recomendado)
 ```powershell
-.\venv\Scripts\python.exe run_gui.py
+.\venv\Scripts\python.exe run_electron.py
 ```
 
-### Modo Consola
-```powershell
-.\venv\Scripts\python.exe backend\yui_assistant.py
-```
+Esto inicia:
+- Desktop Pet (mascota Live2D en esquina)
+- Panel de Control (accesible desde bandeja del sistema)
+- Servidor WebSocket para comunicacion
 
 1. **Espera** a que carguen los modelos (~2-3 min primera vez)
 2. **Habla** diciendo "Yui" seguido de tu mensaje
 3. **Yui responde** con voz clonada
 
-## 🖥️ Interfaz Gráfica
+## 🖥️ Interfaz
 
-La GUI incluye:
-- **Estado visual**: Indica si Yui está activa, escuchando, procesando, etc.
-- **Transcripción en vivo**: Muestra lo que Yui escucha
-- **Respuesta de Yui**: Muestra la respuesta generada
-- **Botones de control**: Silenciar, modo reposo, configuración
-- **Tecla de silencio personalizable**: Configurable desde ajustes
-- **Indicador de silencio**: Muestra claramente cuando el mic está apagado
+El sistema incluye:
+- **Desktop Pet**: Mascota Live2D animada que sigue el cursor
+- **Panel de Control**: Accesible desde la bandeja del sistema
+  - Estado visual (activa, escuchando, procesando)
+  - Transcripcion en vivo
+  - Respuestas de Yui
+  - Botones de control (silenciar, reposo, configuracion)
+  - Tecla de silencio personalizable
+- **Menu de bandeja**: Expresiones, animaciones, modelos
 
 ## ⚡ Comandos de Voz
 
@@ -123,29 +135,31 @@ yui-asistente/
 │   ├── llama_llm.py        # LLM (Llama 3.2)
 │   ├── coqui_tts.py        # Text-to-Speech (XTTS v2)
 │   ├── commands.py         # Comandos de voz
-│   ├── web_search.py       # Búsqueda web (Brave API)
+│   ├── web_search.py       # Busqueda web (Brave API)
 │   ├── memory_system.py    # Memoria selectiva (ChromaDB)
 │   ├── continuous_listener.py # Escucha continua con VAD
 │   ├── vad_listener.py     # Voice Activity Detection
-│   ├── state_machine.py    # Máquina de estados
+│   ├── state_machine.py    # Maquina de estados
 │   ├── reminders.py        # Sistema de recordatorios
 │   ├── gui_api.py          # API para la GUI
+│   ├── websocket_server.py # Servidor WebSocket
 │   ├── logger.py           # Sistema de logging dual
-│   └── audio_manager.py    # Grabación/reproducción
-├── ui/
-│   ├── index.html          # Interfaz HTML
-│   ├── styles.css          # Estilos CSS
-│   └── app.js              # Lógica frontend
-├── voice_samples/          # Muestras de voz para clonación
+│   └── audio_manager.py    # Grabacion/reproduccion
+├── desktop-pet/            # Aplicacion Electron
+│   ├── src/main.ts         # Proceso principal
+│   ├── src/control-panel.ts  # Panel de control
+│   ├── index.html          # Ventana Live2D
+│   ├── control-panel.html  # Panel de control
+│   └── models/             # Modelos Live2D
+├── voice_samples/          # Muestras de voz para clonacion
 ├── logs/
 │   ├── yui.log             # Log de conversaciones
 │   └── yui_debug.log       # Log de funcionamiento interno
 ├── data/chromadb/          # Base de datos de memoria
 ├── .env                    # Variables de entorno (API keys)
-├── .env.example            # Ejemplo de variables de entorno
-├── config.json             # Configuración
-├── run_gui.py              # Lanzador de GUI
-└── requirements.txt        # Dependencias
+├── config.json             # Configuracion
+├── run_electron.py         # Lanzador principal
+└── requirements.txt        # Dependencias Python
 ```
 
 ## 🎨 Personalización de Voz
@@ -181,7 +195,7 @@ Edita `config.json` para ajustar:
 | Memoria | ChromaDB + Sentence Transformers |
 | Comandos | AppOpener |
 | Cuantización | bitsandbytes 4-bit |
-| GUI | pywebview |
+| GUI | Electron + Live2D |
 
 ## 📊 Rendimiento
 

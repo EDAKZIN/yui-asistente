@@ -63,31 +63,88 @@ APP_ALIASES = {
     'vscode': 'visual studio code',
     'code': 'visual studio code',
     'visual code': 'visual studio code',
+    'android studio': 'android studio',
     
-    # Bloc de notas (errores comunes de Whisper)
-    'blog de notas': 'notepad',
-    'bloc de notas': 'notepad',
-    'b, l, o, c de notas': 'notepad',
-    'bloc': 'notepad',
-    'blog': 'notepad',
-    'notas': 'notepad',
-    'notepad': 'notepad',
+    # Bloc de notas (Windows) - errores comunes de Whisper
+    'blog de notas': 'bloc de notas',
+    'el blog de notas': 'bloc de notas',
+    'el bloc de notas': 'bloc de notas',
+    'b, l, o, c de notas': 'bloc de notas',
+    'bloc': 'bloc de notas',
+    'blog': 'bloc de notas',
+    
+    # Notepad (editor) - AppOpener lo detecta como 'notepad'
+    'notepad++': 'notepad',
+    'notepad plus': 'notepad',
+    'notepad plus plus': 'notepad',
+    'notepad mas mas': 'notepad',
+    'notas++': 'notepad',
     
     # Explorador de archivos
-    'explorador de archivos': 'explorer',
-    'el explorador de archivos': 'explorer',
-    'explorador': 'explorer',
-    'archivos': 'explorer',
+    'explorador': 'explorador de archivos',
+    'el explorador': 'explorador de archivos',
+    'archivos': 'explorador de archivos',
+    'carpetas': 'explorador de archivos',
     
-    # Otras apps comunes
-    'calculadora': 'calculator',
+    # Juegos
+    'roblox': 'roblox player',
+    'roblox player': 'roblox player',
+    'roblox studio': 'roblox studio',
+    'minecraft': 'minecraft launcher',
+    'mine': 'minecraft launcher',
+    'minecraft launcher': 'minecraft launcher',
+    'osu': 'osu',
+    
+    # Apps de comunicacion
     'spotify': 'spotify',
     'discord': 'discord',
     'steam': 'steam',
-    'word': 'microsoft word',
-    'excel': 'microsoft excel',
-    'powerpoint': 'microsoft powerpoint',
+    
+    # Office
+    'word': 'word',
+    'excel': 'excel',
+    'powerpoint': 'powerpoint',
+    'outlook': 'outlook',
+    'onenote': 'onenote for windows',
+    
+    # Utilidades
+    'calculadora': 'calculadora',
+    'calc': 'calculadora',
+    'camara': 'c mara',
+    'calendario': 'calendario',
+    'reloj': 'reloj',
+    'terminal': 'terminal',
+    'cmd': 's mbolo del sistema',
+    'powershell': 'powershell',
+    
+    # Apps multimedia
+    'obs': 'obs studio bit',
+    'vlc': 'vlc media player',
+    'fotos': 'fotos',
     'paint': 'paint',
+    
+    # Launchers
+    'epic': 'epic games launcher',
+    'epic games': 'epic games launcher',
+    
+    # Hardware/System
+    'cpu z': 'cpu-z',
+    'cpuz': 'cpu-z',
+    'afterburner': 'msi afterburner',
+    'hwmonitor': 'hwmonitor',
+    'nvidia': 'nvidia app',
+    'nvidia control': 'nvidia control panel',
+    
+    # Otros
+    'github': 'github desktop',
+    'git': 'git bash',
+    'ollama': 'ollama',
+    'rainmeter': 'rainmeter',
+}
+
+# Apps del sistema que NO estan en AppOpener (caso de fallback)
+SYSTEM_APPS = {
+    # Solo como fallback si AppOpener falla
 }
 
 
@@ -118,16 +175,21 @@ class CommandExecutor:
         
         return False
     
-    def open_app(self, app_name: str) -> Tuple[bool, str]:
+    def open_app(self, app_name: str, force: bool = False) -> Tuple[bool, str]:
         """
         Abre una aplicación si no está bloqueada
         
         Args:
             app_name: Nombre de la aplicación a abrir
+            force: Si True, abre sin pedir confirmacion (para cuando usuario ya confirmo)
             
         Returns:
             Tupla (éxito, mensaje)
+            - Para sugerencias retorna (None, "suggest:nombre_app")
         """
+        import subprocess
+        import os
+        
         if not app_name:
             return False, "No especificaste qué aplicación abrir"
         
@@ -144,34 +206,77 @@ class CommandExecutor:
             return False, f"No puedo abrir '{app_name}' por seguridad"
         
         try:
-            # Primero verificar si la app existe en el sistema
+            # 1. Primero verificar si es una app del sistema (se abre con subprocess)
+            if resolved_name in SYSTEM_APPS:
+                exe_path = SYSTEM_APPS[resolved_name]
+                logger.info(f"Abriendo app del sistema: {resolved_name} -> {exe_path}")
+                
+                # Verificar si el ejecutable existe (solo para rutas absolutas)
+                if os.path.isabs(exe_path) and not os.path.exists(exe_path):
+                    # Intentar ruta alternativa para Office (x86)
+                    alt_path = exe_path.replace('Program Files', 'Program Files (x86)')
+                    if os.path.exists(alt_path):
+                        exe_path = alt_path
+                    else:
+                        logger.warning(f"Ejecutable no encontrado: {exe_path}")
+                        return False, f"No encontré '{app_name}' instalada"
+                
+                # Ejecutar
+                subprocess.Popen([exe_path], shell=True)
+                return True, f"Listo, abrí {app_name}"
+            
+            # 2. Si no es del sistema, usar AppOpener
             from AppOpener import give_appnames
-            available_apps = [a.lower() for a in give_appnames()]
+            available_apps = give_appnames()
+            available_apps_lower = [a.lower() for a in available_apps]
             
-            # Buscar coincidencia
-            found = False
+            # 2a. Buscar coincidencia EXACTA primero
+            if resolved_name.lower() in available_apps_lower:
+                logger.info(f"Coincidencia exacta: {resolved_name}")
+                app_open(resolved_name, match_closest=True, throw_error=False, output=False)
+                return True, f"Listo, abrí {app_name}"
+            
+            # 2b. Buscar coincidencia PARCIAL
+            partial_matches = []
             for app in available_apps:
-                if resolved_name.lower() in app or app in resolved_name.lower():
-                    found = True
-                    break
+                app_l = app.lower()
+                resolved_l = resolved_name.lower()
+                # Coincidencia parcial: una contiene a la otra
+                if resolved_l in app_l or app_l in resolved_l:
+                    partial_matches.append(app)
             
-            if not found:
-                logger.warning(f"App no encontrada: {resolved_name}")
-                return False, f"No encontré '{app_name}' instalada"
+            if partial_matches:
+                # Si hay coincidencia parcial y no es forzado, pedir confirmacion
+                if not force:
+                    best_match = partial_matches[0]  # Tomar la primera
+                    logger.info(f"Coincidencia parcial encontrada: '{resolved_name}' -> '{best_match}'")
+                    # Retornar sugerencia (None indica que necesita confirmacion)
+                    return None, f"suggest:{best_match}"
+                else:
+                    # Force=True significa que usuario ya confirmo
+                    best_match = partial_matches[0]
+                    logger.info(f"Abriendo (confirmado): {best_match}")
+                    app_open(best_match, match_closest=True, throw_error=False, output=False)
+                    return True, f"Listo, abrí {best_match}"
             
-            logger.info(f"Abriendo aplicación: {resolved_name}")
-            # output=False evita que AppOpener cree archivos/carpetas
-            app_open(resolved_name, match_closest=True, throw_error=False, output=False)
-            return True, f"Listo, abrí {app_name}"
+            # 3. No hay coincidencia
+            logger.warning(f"App no encontrada: {resolved_name}")
+            return False, f"No encontré '{app_name}' instalada"
             
         except Exception as e:
             logger.error(f"Error al abrir {app_name}: {e}")
             return False, f"No pude abrir '{app_name}'"
     
     def get_time(self) -> str:
-        """Retorna la hora actual"""
+        """Retorna la hora actual en formato 12h"""
         now = datetime.now()
-        return f"Son las {now.strftime('%H:%M')}"
+        hour = now.hour
+        minute = now.minute
+        period = 'de la mañana' if hour < 12 else 'de la tarde' if hour < 19 else 'de la noche'
+        hour_12 = hour % 12
+        if hour_12 == 0:
+            hour_12 = 12
+        return f"Son las {hour_12}:{minute:02d} {period}"
     
     def get_date(self) -> str:
         """Retorna la fecha actual"""

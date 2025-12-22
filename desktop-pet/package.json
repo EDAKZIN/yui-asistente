@@ -1,0 +1,35 @@
+{
+    "name": "yui-desktop-pet",
+    "version": "1.0.0",
+    "description": "Yui Assistant Desktop Pet - Live2D Companion",
+    "main": "dist/main.js",
+    "type": "module",
+    "scripts": {
+        "dev": "npm run build && electron .",
+        "build": "tsc",
+        "start": "electron .",
+        "package": "electron-builder"
+    },
+    "devDependencies": {
+        "@types/node": "^20.10.0",
+        "electron": "^28.0.0",
+        "electron-builder": "^24.9.0",
+        "typescript": "^5.3.0"
+    },
+    "dependencies": {
+        "pixi.js": "^7.3.0",
+        "pixi-live2d-display": "^0.4.0"
+    },
+    "build": {
+        "appId": "com.yui.desktop-pet",
+        "productName": "Yui Desktop Pet",
+        "files": [
+            "dist/**/*",
+            "index.html",
+            "control-panel.html",
+            "control-panel.css",
+            "models/**/*",
+            "model-config.json"
+        ]
+    }
+}

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'">
+    <title>Yui Desktop Pet</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #live2d-canvas {
+            width: 100%;
+            height: 100%;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: sans-serif;
+            font-size: 14px;
+            text-shadow: 0 0 5px black;
+        }
+
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            font-family: sans-serif;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+        }
+
+        .config-mode #canvas-container {
+            background: rgba(0, 200, 255, 0.15);
+            border: 2px dashed rgba(0, 200, 255, 0.6);
+            border-radius: 8px;
+        }
+
+        .config-mode .config-hint {
+            display: block !important;
+        }
+
+        .config-hint {
+            display: none;
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #0cf;
+            padding: 8px 15px;
+            border-radius: 15px;
+            font-family: sans-serif;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        .drag-mode #canvas-container {
+            cursor: move;
+        }
+
+        .drag-mode .drag-hint {
+            display: block !important;
+        }
+
+        .drag-hint {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 150, 0, 0.9);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 10px;
+            font-family: sans-serif;
+            font-size: 11px;
+        }
+
+        .translucent-mode #live2d-canvas {
+            opacity: 0.3;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="canvas-container">
+        <canvas id="live2d-canvas"></canvas>
+        <div class="loading-message" id="loadingMsg">Cargando...</div>
+        <div class="config-hint">Rueda = escala</div>
+        <div class="drag-hint">Arrastra para mover</div>
+    </div>
+
+    <script src="./lib/pixi.min.js"></script>
+    <script src="./lib/live2dcubismcore.min.js"></script>
+    <script src="./lib/pixi-live2d-display.min.js"></script>
+
+    <script>
+        let currentConfig = null;
+        let currentModel = null;
+        let currentScale = 0.15;
+        let saveTimeout = null;
+        let canvasRect = null;
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let configModeEnabled = false; // Solo ajustar escala cuando esta activo
+
+        // Mouse tracking suave
+        let mouseTrackingEnabled = true;
+        let motionPlaying = false;
+        let targetX = 0;
+        let targetY = 0;
+        let currentX = 0;
+        let currentY = 0;
+        const LERP_SPEED = 0.08;
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('./model-config.json');
+                return await response.json();
+            } catch (e) {
+                return {
+                    modelPath: './models/huohuo/huohuo/huohuo.model3.json',
+                    scale: 0.15,
+                    position: { x: 0, y: 180 }
+                };
+            }
+        }
+
+        function scheduleAutoSave() {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                currentConfig.scale = currentScale;
+                window.electronAPI?.saveConfig(currentConfig);
+                console.log('Escala auto-guardada:', currentScale.toFixed(2));
+            }, 1000);
+        }
+
+        // Interpolacion lineal
+        function lerp(start, end, factor) {
+            return start + (end - start) * factor;
+        }
+
+        // Actualizar eye tracking con interpolacion suave
+        function updateEyeTracking() {
+            if (!currentModel?.internalModel?.coreModel || !canvasRect) return;
+            if (!mouseTrackingEnabled || motionPlaying) return;
+
+            currentX = lerp(currentX, targetX, LERP_SPEED);
+            currentY = lerp(currentY, targetY, LERP_SPEED);
+
+            try {
+                currentModel.internalModel.coreModel.setParameterValueById('ParamAngleX', currentX * 30);
+                currentModel.internalModel.coreModel.setParameterValueById('ParamAngleY', -currentY * 30);
+                currentModel.internalModel.coreModel.setParameterValueById('ParamBodyAngleX', currentX * 10);
+            } catch { }
+        }
+
+        // Loop de animacion
+        function animationLoop() {
+            updateEyeTracking();
+            requestAnimationFrame(animationLoop);
+        }
+
+        async function init() {
+            const loadingMsg = document.getElementById('loadingMsg');
+            const canvas = document.getElementById('live2d-canvas');
+            const container = document.getElementById('canvas-container');
+
+            if (typeof PIXI === 'undefined' || typeof PIXI.live2d === 'undefined') {
+                showError('Error cargando librerias');
+                return;
+            }
+
+            currentConfig = await loadConfig();
+            currentScale = currentConfig.scale || 0.15;
+
+            const app = new PIXI.Application({
+                view: canvas,
+                width: 400,
+                height: 500,
+                backgroundAlpha: 0,
+                antialias: true,
+                resolution: window.devicePixelRatio || 1,
+                autoDensity: true
+            });
+
+            canvasRect = { width: 400, height: 500 };
+
+            try {
+                PIXI.live2d.Live2DModel.registerTicker(PIXI.Ticker);
+                currentModel = await PIXI.live2d.Live2DModel.from(currentConfig.modelPath);
+
+                loadingMsg.style.display = 'none';
+
+                currentModel.scale.set(currentScale);
+                currentModel.anchor.set(0.5, 0.5);
+                currentModel.x = app.screen.width / 2 + (currentConfig.position?.x || 0);
+                currentModel.y = app.screen.height / 2 + (currentConfig.position?.y || 0);
+
+                currentModel.interactive = true;
+                currentModel.cursor = 'pointer';
+
+                currentModel.on('pointerdown', () => {
+                    if (document.body.classList.contains('drag-mode')) return;
+                    const motions = currentConfig.motions || {};
+                    const motionKeys = Object.values(motions).filter(Boolean);
+                    if (motionKeys.length > 0) {
+                        const randomMotion = motionKeys[Math.floor(Math.random() * motionKeys.length)];
+                        currentModel.motion(randomMotion);
+                    }
+                });
+
+                app.stage.addChild(currentModel);
+
+                canvas.addEventListener('wheel', (e) => {
+                    if (!configModeEnabled) return; // Solo en modo config
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? -0.01 : 0.01;
+                    currentScale = Math.max(0.05, Math.min(1.0, currentScale + delta));
+                    currentModel.scale.set(currentScale);
+                    scheduleAutoSave();
+                });
+
+                // Drag mode
+                container.addEventListener('mousedown', (e) => {
+                    if (!document.body.classList.contains('drag-mode')) return;
+                    isDragging = true;
+                    dragStartX = e.screenX;
+                    dragStartY = e.screenY;
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    const deltaX = e.screenX - dragStartX;
+                    const deltaY = e.screenY - dragStartY;
+                    dragStartX = e.screenX;
+                    dragStartY = e.screenY;
+                    const currentPos = { x: window.screenX, y: window.screenY };
+                    window.electronAPI?.setWindowPosition(
+                        currentPos.x + deltaX,
+                        currentPos.y + deltaY
+                    );
+                });
+
+                document.addEventListener('mouseup', () => {
+                    isDragging = false;
+                });
+
+                // Tracking global - recibir posicion y actualizar objetivo
+                window.electronAPI?.startMouseTracking();
+                window.electronAPI?.onMousePosition((pos) => {
+                    const centerX = canvasRect.width / 2;
+                    const centerY = canvasRect.height / 2;
+                    targetX = (pos.x - centerX) / canvasRect.width;
+                    targetY = (pos.y - centerY) / canvasRect.height;
+                });
+
+                // Iniciar loop de animacion suave
+                animationLoop();
+
+            } catch (error) {
+                showError('Error: ' + error.message);
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('loadingMsg').style.display = 'none';
+            const container = document.getElementById('canvas-container');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            container.appendChild(errorDiv);
+        }
+
+        // Escuchar modos desde el tray
+        window.electronAPI?.onConfigMode((enabled) => {
+            configModeEnabled = enabled;
+            document.body.classList.toggle('config-mode', enabled);
+        });
+
+        window.electronAPI?.onDragMode((enabled) => {
+            document.body.classList.toggle('drag-mode', enabled);
+        });
+
+        window.electronAPI?.onPassthroughMode((enabled) => {
+            document.body.classList.toggle('translucent-mode', enabled);
+        });
+
+        window.electronAPI?.onMouseTracking((enabled) => {
+            mouseTrackingEnabled = enabled;
+            if (!enabled) {
+                targetX = 0;
+                targetY = 0;
+            }
+        });
+
+        // Expresiones
+        window.electronAPI?.onExpression((name) => {
+            if (!currentModel) {
+                console.log('[Expression] Error: modelo no cargado');
+                return;
+            }
+            console.log('[Expression] Aplicando:', name || 'Normal (reset)');
+            try {
+                if (name === null) {
+                    currentModel.expression();
+                    console.log('[Expression] Reset exitoso');
+                } else {
+                    currentModel.expression(name);
+                    console.log('[Expression] Aplicada:', name);
+                }
+            } catch (e) {
+                console.error('[Expression] Error:', e);
+            }
+        });
+
+        // Animaciones/Motions - pausar tracking durante la animacion
+        window.electronAPI?.onMotion((name) => {
+            if (!currentModel) {
+                console.log('[Motion] Error: modelo no cargado');
+                return;
+            }
+            console.log('[Motion] Iniciando:', name);
+            motionPlaying = true;
+
+            const motionNames = ['Scene1', 'haoqi', 'keshui', 'linghun', 'qizi', 'yaotou', 'zhentou'];
+            const index = motionNames.indexOf(name);
+            console.log('[Motion] Indice encontrado:', index);
+
+            try {
+                if (index >= 0) {
+                    const result = currentModel.motion('', index);
+                    console.log('[Motion] Resultado:', result);
+                } else {
+                    console.log('[Motion] Intentando por nombre directo...');
+                    const result = currentModel.motion(name);
+                    console.log('[Motion] Resultado:', result);
+                }
+            } catch (e) {
+                console.error('[Motion] Error:', e);
+            }
+
+            setTimeout(() => {
+                motionPlaying = false;
+                console.log('[Motion] Tracking reactivado');
+            }, 5000);
+        });
+
+        // Resetear todo (expresiones y animaciones)
+        window.electronAPI?.onMotionReset(() => {
+            if (!currentModel) return;
+            console.log('[Reset] Reseteando a estado inicial...');
+            try {
+                // Detener todas las animaciones
+                currentModel.internalModel?.motionManager?.stopAllMotions();
+                console.log('[Reset] Motions detenidas');
+
+                // Resetear expresion a la default (sin accesorios)
+                currentModel.expression();
+                console.log('[Reset] Expresion reseteada');
+
+                // Tambien resetear expression manager si existe
+                if (currentModel.internalModel?.motionManager?.expressionManager) {
+                    currentModel.internalModel.motionManager.expressionManager.resetExpression?.();
+                }
+
+                console.log('[Reset] Completado');
+            } catch (e) {
+                console.error('[Reset] Error:', e);
+            }
+        });
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+
+</html>

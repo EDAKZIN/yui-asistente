@@ -200,11 +200,19 @@ class ContinuousListener:
             import traceback
             logger.error(f"Traceback completo:\n{traceback.format_exc()}")
         
-        # Reiniciar VAD
+        # Reiniciar VAD solo si no esta muteado
         logger.info("  Reiniciando VAD...")
         try:
-            self.vad.start()
-            logger.debug("  VAD reiniciado correctamente")
+            # Verificar si el usuario tiene mute activado
+            is_muted = False
+            if self.gui_api and hasattr(self.gui_api, '_is_muted'):
+                is_muted = self.gui_api._is_muted
+            
+            if is_muted:
+                logger.info("  VAD NO reiniciado (usuario está muteado)")
+            else:
+                self.vad.start()
+                logger.debug("  VAD reiniciado correctamente")
         except Exception as e:
             logger.error(f"  Error reiniciando VAD: {e}")
             import traceback

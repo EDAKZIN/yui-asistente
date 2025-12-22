@@ -171,6 +171,26 @@ class YuiAssistant:
         """
         text_lower = transcript.lower().strip()
         
+        # Verificar si hay una confirmación pendiente (para abrir app)
+        if hasattr(self, '_pending_app_confirmation') and self._pending_app_confirmation:
+            pending_app = self._pending_app_confirmation
+            self._pending_app_confirmation = None  # Limpiar estado
+            
+            # Verificar si el usuario dijo sí o no
+            affirmative = ['sí', 'si', 'yes', 'ok', 'vale', 'dale', 'claro', 'obvio', 'afirmativo', 'correcto', 'eso', 'esa', 'exacto']
+            negative = ['no', 'nop', 'nope', 'nel', 'negativo', 'otra', 'otro', 'diferente', 'cancela', 'cancelar']
+            
+            if any(word in text_lower for word in affirmative):
+                # Usuario confirmó - abrir la app
+                success, response = command_executor.open_app(pending_app, force=True)
+                return response
+            elif any(word in text_lower for word in negative):
+                return "Entendido, no abriré nada. ¿Cuál aplicación buscabas?"
+            else:
+                # Respuesta no clara, preguntar de nuevo
+                self._pending_app_confirmation = pending_app  # Restaurar
+                return f"No entendí, ¿querías abrir {pending_app}? Dime sí o no."
+        
         # Detectar comando "abre X" / "abrir X"
         open_patterns = [
             r'(?:abre|abrir|abrí|abreme|abrirme|ejecuta|ejecutar|inicia|iniciar)\s+(.+)',
@@ -183,6 +203,13 @@ class YuiAssistant:
                 app_name = match.group(1).strip()
                 self.logger.info(f"Comando detectado: abrir '{app_name}'")
                 success, response = command_executor.open_app(app_name)
+                
+                # Si success es None, es una sugerencia que necesita confirmación
+                if success is None and response.startswith('suggest:'):
+                    suggested_app = response.replace('suggest:', '')
+                    self._pending_app_confirmation = suggested_app
+                    return f"¿Querías abrir {suggested_app}?"
+                
                 return response
         
         # Detectar "qué hora es"

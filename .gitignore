@@ -69,3 +69,21 @@ desktop.ini
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Node.js / Electron
+node_modules/
+package-lock.json
+
+# TypeScript compilado
+desktop-pet/dist/
+
+# Electron build output
+desktop-pet/out/
+desktop-pet/release/
+*.exe
+*.dmg
+*.AppImage
+
+# Modelos Live2D (copyright)
+desktop-pet/models/*
+!desktop-pet/models/README.md

@@ -1,6 +1,6 @@
 """
 Yui AI Assistant - GUI Backend API
-Expone funciones al frontend via pywebview
+Expone funciones al frontend via WebSocket
 """
 
 import os
@@ -14,8 +14,8 @@ logger = logging.getLogger('Yui.GUI')
 
 class YuiGUIAPI:
     """
-    API que se expone al frontend JavaScript via pywebview
-    Todas las funciones aquí son llamables desde JS: window.pywebview.api.<function>()
+    API que se expone al frontend via WebSocket
+    Las funciones son llamadas desde el websocket_server
     """
     
     def __init__(self, yui_assistant=None, continuous_listener=None):
@@ -48,7 +48,7 @@ class YuiGUIAPI:
         logger.info("GUI API inicializada")
     
     def set_window(self, window):
-        """Establece la referencia a la ventana pywebview"""
+        """Establece la referencia a la ventana (legacy, no usado en Electron)"""
         self.window = window
     
     # ==================== Estado ====================
@@ -92,24 +92,44 @@ class YuiGUIAPI:
         
         if self.listener:
             try:
+                # Verificar si estamos en modo reposo
+                is_sleeping = False
+                if hasattr(self.listener, 'state_machine'):
+                    from state_machine import YuiState
+                    is_sleeping = self.listener.state_machine.state == YuiState.SLEEPING
+                
                 if self._is_muted:
-                    # Pausar VAD
-                    if hasattr(self.listener, 'vad'):
-                        self.listener.vad.stop()
-                        logger.debug("VAD detenido por mute")
+                    # Pausar segun el modo actual
+                    if is_sleeping:
+                        # En reposo, detener wake word detector
+                        if hasattr(self.listener, 'wake_detector'):
+                            self.listener.wake_detector.stop()
+                            logger.debug("Wake detector detenido por mute")
+                    else:
+                        # En activo, detener VAD
+                        if hasattr(self.listener, 'vad'):
+                            self.listener.vad.stop()
+                            logger.debug("VAD detenido por mute")
                     logger.info("Micrófono muteado desde GUI")
                 else:
-                    # Reanudar VAD
-                    if hasattr(self.listener, 'vad'):
-                        self.listener.vad.start()
-                        logger.debug("VAD iniciado por unmute")
+                    # Reanudar segun el modo actual
+                    if is_sleeping:
+                        # En reposo, reanudar wake word detector
+                        if hasattr(self.listener, 'wake_detector'):
+                            self.listener.wake_detector.start()
+                            logger.debug("Wake detector iniciado por unmute")
+                    else:
+                        # En activo, reanudar VAD
+                        if hasattr(self.listener, 'vad'):
+                            self.listener.vad.start()
+                            logger.debug("VAD iniciado por unmute")
                     logger.info("Micrófono desmuteado desde GUI")
             except Exception as e:
                 logger.error(f"Error en toggle_mute: {e}")
                 import traceback
                 logger.error(f"Traceback:\n{traceback.format_exc()}")
         
-        return {'muted': self._is_muted}
+        return {'is_muted': self._is_muted}
     
     def toggle_sleep(self) -> dict:
         """Alterna modo reposo"""
@@ -185,27 +205,20 @@ class YuiGUIAPI:
         return {'proactive_enabled': enabled}
     
     # ==================== Callbacks desde backend ====================
+    # Estas funciones son sobreescritas en run_electron.py para usar WebSocket
     
     def notify_state_change(self, new_state: str):
-        """Notifica al frontend un cambio de estado"""
-        if self.window:
-            self.window.evaluate_js(f"window.yuiCallbacks.onStateChange('{new_state}')")
+        """Notifica cambio de estado - sobreescrita por run_electron.py"""
+        pass
     
     def notify_transcript(self, text: str):
-        """Notifica al frontend una nueva transcripción"""
-        if self.window:
-            # Escapar comillas para JS
-            safe_text = text.replace("'", "\\'").replace('"', '\\"')
-            self.window.evaluate_js(f"window.yuiCallbacks.onTranscript('{safe_text}')")
+        """Notifica nueva transcripcion - sobreescrita por run_electron.py"""
+        pass
     
     def notify_response(self, text: str):
-        """Notifica al frontend una respuesta de Yui"""
-        if self.window:
-            safe_text = text.replace("'", "\\'").replace('"', '\\"')
-            self.window.evaluate_js(f"window.yuiCallbacks.onResponse('{safe_text}')")
+        """Notifica respuesta de Yui - sobreescrita por run_electron.py"""
+        pass
     
     def notify_error(self, message: str):
-        """Notifica al frontend un error"""
-        if self.window:
-            safe_msg = message.replace("'", "\\'").replace('"', '\\"')
-            self.window.evaluate_js(f"window.yuiCallbacks.onError('{safe_msg}')")
+        """Notifica error - sobreescrita por run_electron.py"""
+        pass

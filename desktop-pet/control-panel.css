@@ -1,4 +1,5 @@
-/* Yui AI Assistant - Dark Theme CSS */
+/* Yui AI Assistant - Control Panel Dark Theme CSS */
+/* Copiado de ui/styles.css con adaptaciones para Electron */
 
 :root {
     /* Main colors */
@@ -21,15 +22,10 @@
 
     /* Status colors */
     --status-active: #43b581;
-    /* Verde - activo */
     --status-listening: #faa61a;
-    /* Naranja - escuchando */
     --status-processing: #f04747;
-    /* Rojo - procesando */
     --status-sleeping: #747f8d;
-    /* Gris - reposo */
     --status-muted: #f04747;
-    /* Rojo - muteado */
 
     /* Borders & shadows */
     --border-color: #40444b;
@@ -348,7 +344,6 @@ body {
     color: var(--text-primary);
 }
 
-/* Response panel specific */
 .response-panel {
     flex: 1;
 }
@@ -410,7 +405,6 @@ body {
     font-weight: 500;
 }
 
-/* Mute button states */
 .btn-mute.muted {
     background: rgba(240, 71, 71, 0.2);
     border-color: var(--status-muted);
@@ -420,7 +414,6 @@ body {
     fill: var(--status-muted);
 }
 
-/* Sleep button active */
 .btn-sleep.sleeping {
     background: rgba(116, 127, 141, 0.2);
     border-color: var(--status-sleeping);
@@ -618,22 +611,16 @@ input:checked+.slider:before {
     background: var(--hover-color);
 }
 
-/* ============ LOADING STATE ============ */
-.loading-bar {
-    height: 3px;
-    background: linear-gradient(90deg,
-            transparent,
-            var(--accent-cyan),
-            transparent);
-    animation: loading 1.5s infinite;
+/* ============ CONNECTION STATUS ============ */
+/* Oculto - el estado se muestra en el header */
+.connection-status {
+    display: none;
 }
 
-@keyframes loading {
-    0% {
-        transform: translateX(-100%);
-    }
+.connection-status.connected .connection-dot {
+    background: var(--status-active);
+}
 
-    100% {
-        transform: translateX(100%);
-    }
+.connection-status.connected .connection-text {
+    color: var(--status-active);
 }
