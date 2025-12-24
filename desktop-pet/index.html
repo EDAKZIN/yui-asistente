@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'">
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:8765">
     <title>Yui Desktop Pet</title>
     <style>
         * {
@@ -110,6 +110,155 @@
         .translucent-mode #live2d-canvas {
             opacity: 0.3;
         }
+
+        /* Subtítulos */
+        #subtitle-container {
+            position: absolute;
+            top: 40%;
+            /* Posicionado a altura del torso del modelo */
+            left: 50%;
+            transform: translate(-50%, -50%);
+            /* Centrado tanto horizontal como vertical */
+            max-width: 90%;
+            pointer-events: none;
+            z-index: 9999;
+            /* Muy por encima de todo */
+            -webkit-app-region: no-drag;
+            /* CRÍTICO: Forzar renderizado en ventana transparente */
+            will-change: transform;
+            /* Optimización GPU */
+        }
+
+        #subtitle-text {
+            background: rgba(0, 0, 0, 0.95);
+            /* Más opaco para mejor visibilidad */
+            color: #ffffff;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-family: 'Arial', sans-serif;
+            font-size: 18px;
+            line-height: 1.4;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            display: none;
+            min-height: 20px;
+            min-width: 200px;
+            /* Asegurar que sea visible */
+            -webkit-font-smoothing: antialiased;
+            /* Mejor renderizado de texto */
+            backface-visibility: hidden;
+            /* Fix para glitches de render */
+        }
+
+        #subtitle-text.user-text {
+            background: rgba(20, 100, 200, 0.9);
+            border-color: rgba(100, 180, 255, 0.4);
+        }
+
+        #subtitle-text.yui-text {
+            background: rgba(100, 20, 150, 0.9);
+            border-color: rgba(200, 100, 255, 0.4);
+        }
+
+        #subtitle-text.show {
+            display: block;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Modo Config de Subtitulos */
+        .subtitle-config-mode #subtitle-container {
+            border: 3px dashed cyan;
+            background: rgba(0, 255, 255, 0.1);
+            pointer-events: auto;
+        }
+
+        .subtitle-config-mode #subtitle-text {
+            display: block !important;
+            border: 2px solid cyan !important;
+        }
+
+        .subtitle-config-mode #subtitle-placeholder {
+            display: none !important;
+        }
+
+        .subtitle-config-mode .subtitle-hint {
+            display: block !important;
+        }
+
+        .subtitle-hint {
+            display: none;
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: cyan;
+            padding: 8px 15px;
+            border-radius: 15px;
+            font-family: sans-serif;
+            font-size: 11px;
+            white-space: nowrap;
+            z-index: 10001;
+        }
+
+        /* Controles de Subtitulos */
+        #subtitle-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #fff;
+            display: none;
+            z-index: 10000;
+        }
+
+        #subtitle-controls.show {
+            display: block;
+        }
+
+        #subtitle-controls button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        #subtitle-controls button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .subtitle-control-row {
+            margin: 4px 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .subtitle-control-label {
+            min-width: 60px;
+            font-size: 11px;
+        }
     </style>
 </head>
 
@@ -119,6 +268,30 @@
         <div class="loading-message" id="loadingMsg">Cargando...</div>
         <div class="config-hint">Rueda = escala</div>
         <div class="drag-hint">Arrastra para mover</div>
+
+        <!-- Subtítulos -->
+        <div id="subtitle-container">
+            <div id="subtitle-text"></div>
+            <div id="subtitle-placeholder" style="display:none;">▼ ÁREA DE SUBTÍTULOS ▼</div>
+        </div>
+
+        <!-- Controles de Subtitulos -->
+        <div id="subtitle-controls">
+            <div class="subtitle-control-row">
+                <span class="subtitle-control-label">Posicion Y:</span>
+                <button onclick="adjustSubtitleY(-5)">&#9650;</button>
+                <button onclick="adjustSubtitleY(5)">&#9660;</button>
+            </div>
+            <div class="subtitle-control-row">
+                <span class="subtitle-control-label">Tamano:</span>
+                <button onclick="adjustSubtitleSize(-2)">-</button>
+                <button onclick="adjustSubtitleSize(2)">+</button>
+            </div>
+            <div class="subtitle-control-row">
+                <button onclick="toggleSubtitleControls()" style="width:100%">Cerrar</button>
+            </div>
+        </div>
+        <div class="subtitle-hint">Controles en pantalla</div>
     </div>
 
     <script src="./lib/pixi.min.js"></script>
@@ -144,6 +317,83 @@
         let currentX = 0;
         let currentY = 0;
         const LERP_SPEED = 0.08;
+
+        // Sistema de subtítulos
+        let ws = null;
+        let subtitleElement = null;
+        let typewriterTimeout = null;
+        let pendingYuiResponse = null;
+        let subtitleHideTimer = null;  // Timer para ocultar subtítulo automáticamente
+
+        //Configuracion de subtitulos (se carga de model-config.json)
+        let subtitleConfig = {
+            yPosition: 40,
+            fontSize: 18
+        };
+
+        // Funciones de control de subtitulos
+        function adjustSubtitleY(delta) {
+            subtitleConfig.yPosition = Math.max(10, Math.min(90, subtitleConfig.yPosition + delta));
+            const container = document.getElementById('subtitle-container');
+            container.style.top = subtitleConfig.yPosition + '%';
+            console.log('[Subtitulos] Posicion Y ajustada a: ' + subtitleConfig.yPosition + '%');
+            saveSubtitleConfig();
+        }
+
+        function adjustSubtitleSize(delta) {
+            subtitleConfig.fontSize = Math.max(12, Math.min(32, subtitleConfig.fontSize + delta));
+            subtitleElement.style.fontSize = subtitleConfig.fontSize + 'px';
+            console.log('[Subtitulos] Tamano ajustado a: ' + subtitleConfig.fontSize + 'px');
+            saveSubtitleConfig();
+        }
+
+        function toggleSubtitleControls() {
+            const controls = document.getElementById('subtitle-controls');
+            controls.classList.toggle('show');
+        }
+
+        function saveSubtitleConfig() {
+            if (window.electronAPI && window.electronAPI.saveSubtitleConfig) {
+                window.electronAPI.saveSubtitleConfig(subtitleConfig).catch(function (err) {
+                    console.error('[Subtitulos] Error guardando config:', err);
+                });
+            }
+        }
+
+        // Listener IPC para toggle de controles desde menu tray
+        let subtitleConfigMode = false;
+        const PREVIEW_TEXT = 'Este es un ejemplo de subtitulo para ver el tamaño';
+
+        // Listener para modo configuracion de subtitulos (desde menu tray)
+        if (window.electronAPI && typeof window.electronAPI.onSubtitleConfigMode === 'function') {
+            window.electronAPI.onSubtitleConfigMode(function (enabled) {
+                subtitleConfigMode = enabled;
+                document.body.classList.toggle('subtitle-config-mode', enabled);
+                const controls = document.getElementById('subtitle-controls');
+
+                if (enabled) {
+                    controls.classList.add('show');
+                    // Mostrar preview con valores actuales
+                    if (subtitleElement) {
+                        subtitleElement.textContent = PREVIEW_TEXT;
+                        subtitleElement.className = 'yui-text show';
+                        subtitleElement.style.fontSize = subtitleConfig.fontSize + 'px';
+                        subtitleElement.style.maxWidth = subtitleConfig.maxWidth + 'px';
+                    }
+                    console.log('[Subtitulos] Modo configuracion ACTIVADO - preview visible');
+                } else {
+                    controls.classList.remove('show');
+                    // Ocultar preview
+                    if (subtitleElement) {
+                        subtitleElement.textContent = '';
+                        subtitleElement.classList.remove('show');
+                    }
+                    console.log('[Subtitulos] Modo configuracion DESACTIVADO');
+                }
+            });
+        }
+
+        const TYPEWRITER_SPEED = 30;
 
         async function loadConfig() {
             try {
@@ -193,10 +443,136 @@
             requestAnimationFrame(animationLoop);
         }
 
+        // Sistema de subtítulos con typewriter effect
+        function showSubtitle(text, isYui = false) {
+            console.log('[Subtítulos] showSubtitle llamado:', text, 'isYui:', isYui);
+            if (!subtitleElement) {
+                console.error('[Subtítulos] subtitleElement no encontrado!');
+                return;
+            }
+
+            // Cancelar typewriter anterior si existe
+            if (typewriterTimeout) {
+                clearTimeout(typewriterTimeout);
+            }
+
+            // Configurar clase de estilo
+            subtitleElement.className = isYui ? 'yui-text' : 'user-text';
+            subtitleElement.classList.add('show');
+
+            // Efecto typewriter
+            subtitleElement.textContent = '';
+            currentTypewriterIndex = 0;
+
+            function typeNextChar() {
+                if (currentTypewriterIndex < text.length) {
+                    subtitleElement.textContent += text[currentTypewriterIndex];
+                    currentTypewriterIndex++;
+                    typewriterTimeout = setTimeout(typeNextChar, TYPEWRITER_SPEED);
+                }
+            }
+
+            typeNextChar();
+        }
+
+        function hideSubtitle() {
+            if (!subtitleElement) return;
+            if (typewriterTimeout) {
+                clearTimeout(typewriterTimeout);
+            }
+            subtitleElement.classList.remove('show');
+            subtitleElement.textContent = '';
+        }
+
+        // Conectar WebSocket para subtítulos
+        let wsReconnectCount = 0;
+        function connectSubtitleWebSocket() {
+            wsReconnectCount++;
+            console.log(`[Subtítulos] Intento de conexión WebSocket #${wsReconnectCount} a ws://localhost:8765`);
+
+            ws = new WebSocket('ws://localhost:8765');
+            window.ws = ws; // Exponer globalmente para mute global
+
+            ws.onopen = () => {
+                console.log('[Subtítulos] WebSocket conectado');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+
+                    if (message.type === 'transcript') {
+                        // Mostrar transcripción del usuario inmediatamente
+                        const text = message.data?.text || '';
+                        if (text) {
+                            showSubtitle(text, false);
+                            // Auto-ocultar después de 3 segundos
+                            setTimeout(hideSubtitle, 3000);
+                        }
+                    }
+                    else if (message.type === 'response') {
+                        // Solo guardar respuesta, NO mostrar aquí
+                        pendingYuiResponse = message.data?.text || '';
+                    }
+                    // === ANIMACION ===
+                    else if (message.type === 'tts_start') {
+                        // TTS INICIA - mostrar subtítulo sincronizado con audio
+                        const text = message.data?.text || '';
+                        if (text) {
+                            console.log('[Subtítulos] TTS iniciando, mostrando:', text);
+
+                            // Cancelar timer anterior si existe
+                            if (subtitleHideTimer) {
+                                clearTimeout(subtitleHideTimer);
+                                console.log('[Subtítulos] Timer anterior cancelado');
+                            }
+
+                            showSubtitle(text, true);  // TRUE = es de Yui, fondo morado
+                            pendingYuiResponse = null; // Limpiar pendiente
+
+                            // Duración proporcional: min 5s, +150ms por carácter (aumentado para leer cómodamente)
+                            const duration = Math.max(5000, text.length * 150);
+                            console.log(`[Subtítulos] Duración calculada: ${duration}ms para ${text.length} caracteres`);
+
+                            subtitleHideTimer = setTimeout(() => {
+                                console.log('[Subtítulos] Timer completado, ocultando');
+                                hideSubtitle();
+                            }, duration);
+                        }
+                    }
+                    else if (message.type === 'tts_complete') {
+                        // TTS completó - ya se ocultó por timeout, no hacer nada
+                        console.log('[Subtítulos] TTS completado');
+                    }
+                } catch (e) {
+                    console.error('[Subtítulos] Error:', e);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('[Subtítulos] WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                console.log('[Subtítulos] WebSocket cerrado, reconectando en 3s...');
+                setTimeout(connectSubtitleWebSocket, 3000);
+            };
+        }
+
         async function init() {
             const loadingMsg = document.getElementById('loadingMsg');
             const canvas = document.getElementById('live2d-canvas');
             const container = document.getElementById('canvas-container');
+
+            // Inicializar elemento de subtítulos
+            subtitleElement = document.getElementById('subtitle-text');
+
+            // Conectar WebSocket para subtítulos con delay inicial
+            // (esperar a que backend esté completamente iniciado)
+            console.log('[Subtítulos] Esperando 2s antes de conectar WebSocket...');
+            setTimeout(() => {
+                connectSubtitleWebSocket();
+            }, 2000);
 
             if (typeof PIXI === 'undefined' || typeof PIXI.live2d === 'undefined') {
                 showError('Error cargando librerias');
@@ -205,6 +581,25 @@
 
             currentConfig = await loadConfig();
             currentScale = currentConfig.scale || 0.15;
+
+            // Cargar configuracion de subtitulos guardada
+            if (currentConfig.subtitles) {
+                if (currentConfig.subtitles.yPosition) {
+                    subtitleConfig.yPosition = currentConfig.subtitles.yPosition;
+                }
+                if (currentConfig.subtitles.fontSize) {
+                    subtitleConfig.fontSize = currentConfig.subtitles.fontSize;
+                }
+                if (currentConfig.subtitles.maxWidth) {
+                    subtitleConfig.maxWidth = currentConfig.subtitles.maxWidth;
+                }
+                // Aplicar estilos de subtitulos guardados
+                const subtitleContainer = document.getElementById('subtitle-container');
+                subtitleContainer.style.top = subtitleConfig.yPosition + '%';
+                subtitleElement.style.fontSize = subtitleConfig.fontSize + 'px';
+                subtitleElement.style.maxWidth = subtitleConfig.maxWidth + 'px';
+                console.log('[Subtitulos] Configuracion cargada:', subtitleConfig);
+            }
 
             const app = new PIXI.Application({
                 view: canvas,

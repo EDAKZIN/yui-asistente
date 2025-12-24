@@ -3,6 +3,17 @@
  * Comunicación via WebSocket con el backend Python
  */
 
+// Declaración de Window con API de Electron
+declare global {
+    interface Window {
+        electron?: {
+            onWindowRestored?: (callback: () => void) => void;
+            onGlobalMuteTrigger?: (callback: () => void) => void;
+            updateMuteKey?: (newKey: string) => void;
+        };
+    }
+}
+
 // Tipos
 type AppState = 'loading' | 'active' | 'listening' | 'processing' | 'sleeping' | 'muted';
 
@@ -135,9 +146,19 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                 if (message.data.state) {
                     updateState(message.data.state);
                 }
+
+                // Persistir estado muted
                 if (message.data.is_muted !== undefined) {
                     state.isMuted = message.data.is_muted;
                     updateMuteUI();
+                }
+
+                // Persistir estado sleeping (copiar lógica de mute)
+                if (message.data.is_sleeping !== undefined) {
+                    state.isSleeping = message.data.is_sleeping;
+                    if (state.isSleeping) {
+                        updateState('sleeping');
+                    }
                 }
             }
             break;
@@ -323,6 +344,8 @@ function setupEventListeners(): void {
         elements.currentMuteKey.textContent = 'Presiona una tecla...';
     });
 
+    // Listener solo para capturar nueva tecla al cambiar keybind
+    // El toggle_mute se maneja globalmente desde main.ts (uIOhook)
     document.addEventListener('keydown', (e) => {
         if (waitingForKey) {
             e.preventDefault();
@@ -331,15 +354,13 @@ function setupEventListeners(): void {
             state.muteKey = newKey;
             elements.currentMuteKey.textContent = newKey;
             sendAction('set_mute_key', { key: newKey });
-        } else {
-            // Verificar si es la tecla de mute
-            const pressedKey = e.key.length === 1 ? e.key.toUpperCase() : e.key;
-            if (pressedKey === state.muteKey || e.key === state.muteKey) {
-                e.preventDefault();
-                console.log('Mute key pressed:', state.muteKey);
-                sendAction('toggle_mute');
+
+            // Notificar a Electron para actualizar global shortcut
+            if (window.electron?.updateMuteKey) {
+                window.electron.updateMuteKey(newKey);
             }
         }
+        // No se maneja toggle_mute aqui - el hook global en main.ts ya lo hace
     });
 }
 
@@ -349,7 +370,28 @@ function init(): void {
     console.log('Inicializando Panel de Control...');
     setupEventListeners();
     connectWebSocket();
+
+    // Listener para cuando la ventana se restaura desde bandeja
+    if (window.electron?.onWindowRestored) {
+        window.electron.onWindowRestored(() => {
+            console.log('Ventana restaurada, refrescando estado...');
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                sendAction('get_initial_state');
+            }
+        });
+    }
+
+    // Listener para atajo global de mute
+    if (window.electron?.onGlobalMuteTrigger) {
+        window.electron.onGlobalMuteTrigger(() => {
+            console.log('Atajo global de mute presionado');
+            sendAction('toggle_mute');
+        });
+    }
 }
 
 // Iniciar cuando DOM esté listo
 document.addEventListener('DOMContentLoaded', init);
+
+// Exportar vacío para hacer este archivo un módulo (necesario para declare global)
+export { };

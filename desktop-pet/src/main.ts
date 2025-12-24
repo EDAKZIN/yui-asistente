@@ -1,20 +1,67 @@
 /**
  * Yui Desktop Pet - Proceso Principal de Electron
- * Ventana transparente con modelo Live2D + Panel de Control
+ * MUTE GLOBAL: main.ts → WebSocket directo al backend
  */
 
 import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
+import { WebSocket } from 'ws';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// ==================== LOGGING ====================
+const logsDir = path.join(__dirname, '..', '..', 'logs');
+if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+}
+
+const logStream = fs.createWriteStream(path.join(logsDir, 'electron.log'), { flags: 'w' });
+const originalLog = console.log;
+const originalError = console.error;
+
+console.log = (...args: any[]) => {
+    const timestamp = new Date().toISOString();
+    const message = `[${timestamp}] ${args.join(' ')}`;
+    logStream.write(message + '\n');
+    originalLog.apply(console, args);
+};
+
+console.error = (...args: any[]) => {
+    const timestamp = new Date().toISOString();
+    const message = `[${timestamp}] ERROR: ${args.join(' ')}`;
+    logStream.write(message + '\n');
+    originalError.apply(console, args);
+};
+
+console.log('====== ELECTRON LOG INICIADO ======');
 
 let mainWindow: BrowserWindow | null = null;
 let controlWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const isMac = process.platform === 'darwin';
+
+// WebSocket directo al backend (sin pasar por frontend)
+let backendWS: WebSocket | null = null;
+
+function connectToBackend() {
+    backendWS = new WebSocket('ws://localhost:8765');
+
+    backendWS.on('open', () => {
+        console.log('[Backend WS] Conectado a ws://localhost:8765');
+    });
+
+    backendWS.on('error', (err) => {
+        console.error('[Backend WS] Error:', err.message);
+    });
+
+    backendWS.on('close', () => {
+        console.log('[Backend WS] Desconectado, reintentando en 5s...');
+        setTimeout(connectToBackend, 5000);
+    });
+}
 
 // Cargar configuracion guardada
 function loadConfig(): any {
@@ -37,11 +84,22 @@ function saveConfig(config: any): void {
     }
 }
 
+// Cargar config global (backend config.json)
+function loadGlobalConfig(): any {
+    const globalConfigPath = path.join(__dirname, '..', '..', 'config.json');
+    try {
+        const data = fs.readFileSync(globalConfigPath, 'utf-8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error('[Config Global] Error cargando config.json:', error);
+        return {};
+    }
+}
+
 function createWindow(): void {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
     const config = loadConfig();
 
-    // Usar posicion guardada o default
     const windowX = config.windowX !== undefined ? config.windowX : width - 420;
     const windowY = config.windowY !== undefined ? config.windowY : height - 520;
 
@@ -66,12 +124,6 @@ function createWindow(): void {
     });
 
     mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
-
-    // Abrir DevTools para debug (descomentar cuando sea necesario)
-    // mainWindow.webContents.openDevTools({ mode: 'detach' });
-
-    // Click-through desactivado por defecto (se activa con modo atravesar)
-
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
 
     if (isMac) {
@@ -86,7 +138,6 @@ function createWindow(): void {
 }
 
 function createControlWindow(): void {
-    // Si ya existe, solo mostrarla
     if (controlWindow && !controlWindow.isDestroyed()) {
         controlWindow.show();
         controlWindow.focus();
@@ -105,17 +156,13 @@ function createControlWindow(): void {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            preload: path.join(__dirname, '..', 'src', 'preload.js'),
             devTools: true
         }
     });
 
     controlWindow.loadFile(path.join(__dirname, '..', 'control-panel.html'));
-
-    // Ocultar menu de la ventana
     controlWindow.setMenuBarVisibility(false);
-
-    // DevTools solo para debug (descomentar si necesario)
-    // controlWindow.webContents.openDevTools({ mode: 'detach' });
 
     controlWindow.on('closed', () => {
         controlWindow = null;
@@ -132,10 +179,8 @@ function createTray(): void {
         } else {
             trayIcon = nativeImage.createFromPath(iconPath);
         }
-
         tray = new Tray(trayIcon);
     } catch {
-        // Crear tray vacio si no se encuentra el icono
         tray = new Tray(nativeImage.createEmpty());
     }
 
@@ -193,6 +238,14 @@ function createTray(): void {
             }
         },
         {
+            label: 'Ajustar Subtitulos',
+            type: 'checkbox',
+            checked: false,
+            click: (menuItem) => {
+                mainWindow?.webContents.send('subtitle-config-mode', menuItem.checked);
+            }
+        },
+        {
             label: 'Arrastrar',
             type: 'checkbox',
             checked: false,
@@ -239,7 +292,7 @@ function createTray(): void {
     tray.setContextMenu(contextMenu);
 }
 
-// Manejadores IPC para toggle de click-through
+// IPC handlers
 ipcMain.on('set-ignore-mouse-events', (_event, ignore: boolean) => {
     if (isMac) {
         mainWindow?.setIgnoreMouseEvents(ignore);
@@ -253,14 +306,12 @@ ipcMain.on('set-window-position', (_event, x: number, y: number) => {
     const newY = Math.round(y);
     mainWindow?.setPosition(newX, newY);
 
-    // Guardar posicion en config
     const config = loadConfig();
     config.windowX = newX;
     config.windowY = newY;
     saveConfig(config);
 });
 
-// Guardar configuracion del modelo
 ipcMain.on('save-config', (_event, config: object) => {
     const configPath = path.join(__dirname, '..', 'model-config.json');
     try {
@@ -271,7 +322,22 @@ ipcMain.on('save-config', (_event, config: object) => {
     }
 });
 
-// Mouse tracking global
+// Handler para guardar configuracion de subtitulos
+ipcMain.handle('save-subtitle-config', async (_event, subtitleConfig: object) => {
+    const configPath = path.join(__dirname, '..', 'model-config.json');
+    try {
+        const fullConfig = loadConfig();
+        fullConfig.subtitles = { ...fullConfig.subtitles, ...subtitleConfig };
+        fs.writeFileSync(configPath, JSON.stringify(fullConfig, null, 4), 'utf-8');
+        console.log('Configuracion de subtitulos guardada');
+        return true;
+    } catch (error) {
+        console.error('Error guardando config de subtitulos:', error);
+        return false;
+    }
+});
+
+// Mouse tracking
 let mouseTrackingInterval: NodeJS.Timeout | null = null;
 
 ipcMain.on('start-mouse-tracking', () => {
@@ -280,7 +346,6 @@ ipcMain.on('start-mouse-tracking', () => {
         const cursorPos = screen.getCursorScreenPoint();
         const winBounds = mainWindow?.getBounds();
         if (winBounds) {
-            // Enviar posicion relativa a la ventana
             mainWindow?.webContents.send('mouse-position', {
                 x: cursorPos.x - winBounds.x,
                 y: cursorPos.y - winBounds.y,
@@ -288,7 +353,7 @@ ipcMain.on('start-mouse-tracking', () => {
                 screenY: cursorPos.y
             });
         }
-    }, 50); // 20 FPS
+    }, 50);
 });
 
 ipcMain.on('stop-mouse-tracking', () => {
@@ -297,6 +362,61 @@ ipcMain.on('stop-mouse-tracking', () => {
         mouseTrackingInterval = null;
     }
 });
+
+// ==================== GLOBAL HOTKEY ====================
+(async () => {
+    try {
+        const { uIOhook } = await import('uiohook-napi');
+
+        const keyCodeMap: { [key: string]: number } = {
+            'F1': 59, 'F2': 60, 'F3': 61, 'F4': 62,
+            'F5': 63, 'F6': 64, 'F7': 65, 'F8': 66,
+            'F9': 67, 'F10': 68, 'F11': 69, 'F12': 70,
+            '|': 43
+        };
+
+        const globalConfig = loadGlobalConfig();
+        const muteKey = globalConfig.gui?.mute_key || 'F1';
+        const currentMuteKeyCode = keyCodeMap[muteKey] || 59;
+
+        console.log(`[Config] Mute key: ${muteKey}`);
+        console.log(`[UIOHook] Configurando keycode: ${currentMuteKeyCode}`);
+
+        uIOhook.start();
+        console.log('[UIOHook] Hook iniciado');
+
+        // Conectar al backend WS
+        connectToBackend();
+
+        // CRÍTICO: Usar 'keyup' para evitar múltiples disparos
+        uIOhook.on('keyup', (e) => {
+            if (e.keycode === currentMuteKeyCode) {
+                console.log('[UIOHook] Mute key soltada - toggling');
+
+                // Enviar DIRECTO al backend via WebSocket
+                if (backendWS && backendWS.readyState === WebSocket.OPEN) {
+                    backendWS.send(JSON.stringify({ action: 'toggle_mute', params: {} }));
+                    console.log('[UIOHook] Comando enviado a backend WS');
+                } else {
+                    console.error('[UIOHook] Backend WS no conectado');
+                }
+            }
+        });
+
+        app.on('will-quit', () => {
+            try {
+                uIOhook.stop();
+                backendWS?.close();
+                console.log('[UIOHook] Hook detenido');
+            } catch (e) {
+                console.error('[UIOHook] Error:', e);
+            }
+        });
+
+    } catch (error) {
+        console.error('[UIOHook] Error:', error);
+    }
+})();
 
 app.whenReady().then(() => {
     createWindow();

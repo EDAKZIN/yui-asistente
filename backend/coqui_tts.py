@@ -33,6 +33,18 @@ class CoquiTTS:
         logger.info("Inicializando Coqui XTTS v2")
         logger.info(f"  Carpeta de voces: {voice_samples_dir}")
         logger.info(f"  Dispositivo: {self.device}")
+        
+        # Callback para notificar cuando síntesis completa
+        self._on_synthesis_complete = None
+    
+    def set_synthesis_complete_callback(self, callback):
+        """
+        Configura callback para cuando TTS completa síntesis
+        
+        Args:
+            callback: Función a llamar con el texto sintetizado
+        """
+        self._on_synthesis_complete = callback
     
     def _find_voice_samples(self):
         """Busca todas las muestras de voz en la carpeta"""
@@ -104,8 +116,9 @@ class CoquiTTS:
             speaker_wavs = self.voice_samples if self.voice_samples else None
             
             if speaker_wavs:
-                # Usar 2 muestras para balance velocidad/calidad
-                samples_to_use = speaker_wavs[:2]
+                # Usar todas las muestras disponibles para mejor calidad
+                # La primera síntesis tardará más, pero las siguientes usan el embedding cacheado
+                samples_to_use = speaker_wavs
                 logger.debug(f"  Usando {len(samples_to_use)} muestras de referencia")
                 
                 self.tts.tts_to_file(
@@ -122,15 +135,23 @@ class CoquiTTS:
                     file_path=output_path
                 )
             
-            # Reproducir audio
+            # Cargar audio en memoria
             audio_data, sample_rate = sf.read(output_path)
+            
+            # CRITICO: Notificar GUI AQUI - justo antes que audio suene
+            # Timing perfecto: subtitulo aparece EXACTAMENTE cuando audio empieza
+            if self._on_synthesis_complete is not None:
+                self._on_synthesis_complete(text)
+            
+            # Reproducir audio INMEDIATAMENTE después del notify
             sd.play(audio_data, sample_rate)
             sd.wait()
             
             # Limpiar archivo temporal
             os.unlink(output_path)
             
-            logger.info(" Síntesis completada")
+            
+            logger.info("  Síntesis completada")
             
         except Exception as e:
             logger.error(f" Error al sintetizar: {e}")

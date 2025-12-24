@@ -33,7 +33,6 @@ numpy>=1.22.0
 
 # Utilities
 colorlog>=6.7.0
-loguru>=0.7.0
 
 # Voice Commands - Abrir aplicaciones
 AppOpener>=1.7

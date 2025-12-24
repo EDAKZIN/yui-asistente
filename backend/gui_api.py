@@ -58,18 +58,22 @@ class YuiGUIAPI:
         logger.info(">>> get_initial_state() llamado desde frontend")
         
         current_state = 'active'
+        is_sleeping = False
         if self.listener and hasattr(self.listener, 'state_machine'):
             current_state = self.listener.state_machine.state.value
+            from state_machine import YuiState
+            is_sleeping = self.listener.state_machine.state == YuiState.SLEEPING
         
         result = {
             'state': current_state,
-            'muted': self._is_muted,
+            'is_muted': self._is_muted,  # CORREGIDO: era 'muted' pero frontend espera 'is_muted'
+            'is_sleeping': is_sleeping,   # AGREGADO: para persistencia de sleeping
             'mute_key': self._mute_key,
             'vad_threshold': 0.65,
             'proactive_enabled': True
         }
         
-        logger.info(f">>> Retornando: mute_key='{self._mute_key}', state='{current_state}'")
+        logger.info(f">>> Retornando: mute_key='{self._mute_key}', state='{current_state}', is_muted={self._is_muted}, is_sleeping={is_sleeping}")
         return result
     
     def get_state(self) -> dict:
@@ -80,7 +84,7 @@ class YuiGUIAPI:
         
         return {
             'state': current_state,
-            'muted': self._is_muted
+            'is_muted': self._is_muted  # CORREGIDO: era 'muted'
         }
     
     # ==================== Controles ====================
@@ -212,13 +216,17 @@ class YuiGUIAPI:
         pass
     
     def notify_transcript(self, text: str):
-        """Notifica nueva transcripcion - sobreescrita por run_electron.py"""
+        """Notifica transcript detectado (override en subclase)"""
         pass
     
     def notify_response(self, text: str):
-        """Notifica respuesta de Yui - sobreescrita por run_electron.py"""
+        """Notifica respuesta de Yui (override en subclase)"""
+        pass
+    
+    def notify_tts_start(self, text: str):
+        """Notifica inicio de síntesis TTS (override en subclase)"""
         pass
     
     def notify_error(self, message: str):
-        """Notifica error - sobreescrita por run_electron.py"""
+        """Notifica error (override en subclase)"""
         pass

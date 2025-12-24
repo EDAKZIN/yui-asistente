@@ -79,10 +79,20 @@ def run_with_electron():
             def new_notify_error(message: str):
                 ws_server.notify_error(message)
             
+            def new_notify_tts_start(text: str):
+                ws_server.notify_tts_start(text)
+            
+            def new_notify_tts_complete(text: str):
+                ws_server.notify_tts_complete(text)
+            
             api.notify_state_change = new_notify_state
             api.notify_transcript = new_notify_transcript
             api.notify_response = new_notify_response
             api.notify_error = new_notify_error
+            api.notify_tts_start = new_notify_tts_start  # CRÍTICO: Conectar callback
+            
+            # Conectar callbacks de TTS
+            yui.tts.set_synthesis_complete_callback(new_notify_tts_complete)
         
         setup_ws_notifications()
         

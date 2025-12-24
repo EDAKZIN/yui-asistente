@@ -174,6 +174,25 @@ class YuiWebSocketServer:
                 self._loop
             )
     
+    def notify_tts_start(self, text: str):
+        """Notifica que TTS va a iniciar síntesis (para mostrar subtítulo)"""
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self.broadcast({
+                    'type': 'tts_start',
+                    'data': {'text': text}
+                }),
+                self._loop
+            )
+    
+    def notify_tts_complete(self, text: str):
+        """Notifica que TTS completó síntesis (para ocultar subtítulo)"""
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self.broadcast({'type': 'tts_complete', 'data': {'text': text}}),
+                self._loop
+            )
+    
     async def start_async(self):
         """Inicia el servidor WebSocket (async)"""
         self._loop = asyncio.get_event_loop()

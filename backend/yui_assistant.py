@@ -240,7 +240,10 @@ class YuiAssistant:
                 
                 if success:
                     # Pasar resultados al LLM para una respuesta natural
-                    prompt_with_context = f"Basándote en esta información de internet: {search_results}\n\nResponde brevemente a: {transcript}"
+                    # Incluir fecha actual para contexto temporal
+                    from datetime import datetime
+                    fecha_actual = datetime.now().strftime("%d de %B de %Y")
+                    prompt_with_context = f"Fecha actual: {fecha_actual}. Basandote en esta informacion de internet: {search_results}\n\nResponde brevemente a: {transcript}"
                     return self.llama.generate_response(prompt_with_context, use_history=False)
                 else:
                     return search_results

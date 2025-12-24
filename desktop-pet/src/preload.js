@@ -44,5 +44,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     stopMouseTracking: () => {
         ipcRenderer.send('stop-mouse-tracking');
+    },
+    // Configuración de subtítulos
+    onSubtitleConfigMode: (callback) => {
+        ipcRenderer.on('subtitle-config-mode', (event, enabled) => callback(enabled));
+    },
+    saveSubtitleConfig: (config) => {
+        return ipcRenderer.invoke('save-subtitle-config', config);
     }
 });

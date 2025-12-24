@@ -1,19 +1,21 @@
 # 🎤 Yui AI Assistant
 
-**Yui** es una asistente de voz con inteligencia artificial creada por **EDAKZIN**. Combina reconocimiento de voz, generación de lenguaje natural y clonación de voz para ofrecer una experiencia conversacional única.
+**Yui** es una asistente de voz con inteligencia artificial creada por **EDAKZIN**. Combina reconocimiento de voz, generacion de lenguaje natural y clonacion de voz para ofrecer una experiencia conversacional unica con subtitulos sincronizados.
 
-## ✨ Características
+## Caracteristicas
 
-- 🎙️ **STT (Speech-to-Text)**: OpenAI Whisper "medium" con GPU
-- 🧠 **LLM**: Llama 3.2 3B con cuantización 4-bit (~2.5GB VRAM)
-- 🗣️ **TTS con clonación de voz**: Coqui XTTS v2
-- 💾 **Memoria selectiva**: ChromaDB con filtrado inteligente
-- ⚡ **Comandos de voz**: Abrir apps, hora, fecha, búsqueda web
-- 🔍 **Búsqueda web**: Brave Search API
-- 🎭 **Personalidad única**: Amigable por defecto, sarcástica si la provocan
-- 🖥️ **Desktop Pet**: Mascota Live2D con Electron + Panel de Control
-- ⏰ **Recordatorios**: Sistema de recordatorios por voz
-- 💬 **Comentarios proactivos**: Yui comenta cuando llevas tiempo sin hablar
+- **STT (Speech-to-Text)**: OpenAI Whisper "medium" con GPU
+- **LLM**: Llama 3.2 3B con cuantizacion 4-bit (~2.5GB VRAM)
+- **TTS con clonacion de voz**: Coqui XTTS v2
+- **Memoria selectiva**: ChromaDB con filtrado inteligente
+- **Comandos de voz**: Abrir apps, hora, fecha, busqueda web
+- **Busqueda web**: Brave Search API con contexto de fecha
+- **Personalidad unica**: Amigable por defecto, sarcastica si la provocan
+- **Desktop Pet**: Mascota Live2D con Electron + Panel de Control
+- **Subtitulos sincronizados**: Aparecen exactamente cuando el audio empieza
+- **Recordatorios**: Sistema de recordatorios por voz
+- **Comentarios proactivos**: Yui comenta cuando llevas tiempo sin hablar
+- **Configuracion desde tray**: Ajusta escala, subtitulos y mas desde el menu
 
 ## 🚀 Pipeline
 
@@ -86,7 +88,7 @@ Esto inicia:
 2. **Habla** diciendo "Yui" seguido de tu mensaje
 3. **Yui responde** con voz clonada
 
-## 🖥️ Interfaz
+## Interfaz
 
 El sistema incluye:
 - **Desktop Pet**: Mascota Live2D animada que sigue el cursor
@@ -96,7 +98,12 @@ El sistema incluye:
   - Respuestas de Yui
   - Botones de control (silenciar, reposo, configuracion)
   - Tecla de silencio personalizable
-- **Menu de bandeja**: Expresiones, animaciones, modelos
+- **Menu de bandeja**:
+  - Expresiones y animaciones
+  - Ajustar escala del modelo
+  - Ajustar subtitulos (posicion, tamano)
+  - Arrastrar ventana
+  - Modo atravesar (passthrough)
 
 ## ⚡ Comandos de Voz
 

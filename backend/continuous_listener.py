@@ -96,6 +96,14 @@ class ContinuousListener:
         """Establece la referencia al GUI API para actualizaciones en tiempo real"""
         self.gui_api = gui_api
         logger.info("GUI API conectado a ContinuousListener")
+        
+        # Conectar callback del TTS para subtitulos sincronizados
+        # El callback se llama justo antes de reproducir el audio
+        if hasattr(self.yui, 'tts'):
+            def on_tts_ready(text):
+                self._notify_gui('notify_tts_start', text)
+            self.yui.tts.set_synthesis_complete_callback(on_tts_ready)
+            logger.info("Callback TTS conectado para subtitulos sincronizados")
     
     def _notify_gui(self, method: str, *args):
         """Envía notificación al GUI si está conectado"""
@@ -362,9 +370,12 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
             # 4. Procesar normalmente
             response = self.yui._process_transcript(transcript)
             
-            # 5. Sintetizar respuesta
+            # Sintetizar respuesta
             print(f"\nYui: {response}")
+            logger.info(f"Respuesta de Yui: '{response[:50]}...'")
+            
             self._notify_gui('notify_response', response)
+            
             self.yui.tts.synthesize(response)
             
             # 6. Auto-limpiar memoria si respuesta es repetitiva
@@ -522,11 +533,11 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
                     # Cambiar a estado PROACTIVE
                     self.state_machine.transition_to(YuiState.PROACTIVE)
                     
-                    # Obtener comentario
+                # Generar comentario proactivo
                     comment = self.state_machine.get_proactive_comment()
-                    
-                    print(f"\nYui: {comment}")
-                    self.yui.tts.synthesize(comment)
+                    if comment:
+                        print(f"\nYui (proactivo): {comment}")
+                        self.yui.tts.synthesize(comment)
                     
                     # Resetear timer
                     self.state_machine.last_activity_time = time.time()
