@@ -327,33 +327,56 @@ class WhisperWakeWordDetector:
         logger.info(f"WhisperWakeWordDetector inicializado (name='{name}', chunk={chunk_duration}s)")
     
     def load_model(self):
-        """Carga Whisper base para deteccion de wake word"""
+        """Carga Whisper base (OpenAI) para deteccion de wake word"""
         if self.model is not None:
             logger.warning("Modelo Whisper wake word ya cargado")
             return
         
-        logger.info("Cargando Whisper base para wake word...")
+        logger.info("Cargando OpenAI Whisper base para wake word...")
         
         try:
             import whisper
             
-            # Usar modelo base para mejor precision (tiny es muy impreciso)
-            self.model = whisper.load_model("base")
-            logger.info("Whisper base cargado para deteccion de wake word")
+            # Usar modelo base de OpenAI Whisper (se puede descargar sin crash)
+            self.model = whisper.load_model("base", device="cuda")
+            logger.info("OpenAI Whisper base cargado para deteccion de wake word")
             
         except Exception as e:
-            logger.error(f"Error cargando Whisper base: {e}")
+            logger.error(f"Error cargando OpenAI Whisper base: {e}")
             raise
     
     def unload_model(self):
-        """Descarga el modelo"""
-        if self.model is not None:
+        """Descarga el modelo de forma segura (OpenAI Whisper soporta esto)"""
+        if self.model is None:
+            logger.debug("Modelo wake word ya está descargado")
+            return
+        
+        logger.info("Descargando modelo OpenAI Whisper wake word...")
+        
+        try:
+            import gc
+            import torch
+            
+            # Mover modelo a CPU antes de eliminar (más seguro)
+            if hasattr(self.model, 'to'):
+                self.model.to('cpu')
+            
+            # Eliminar referencia al modelo
             del self.model
             self.model = None
-            import torch
+            
+            # Forzar garbage collection
+            gc.collect()
+            
+            # Liberar cache CUDA
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            logger.info("Modelo Whisper wake word descargado")
+            
+            logger.info("Modelo OpenAI Whisper wake word descargado")
+            
+        except Exception as e:
+            logger.error(f"Error descargando modelo wake word: {e}")
+            self.model = None
     
     def set_callback(self, on_wake_word: Callable):
         """Configura callback para wake word detectado"""
@@ -430,13 +453,15 @@ class WhisperWakeWordDetector:
                     # Mantener overlap del 50% para no perder palabras
                     audio_buffer = audio_buffer[self.chunk_samples // 2:]
                     
-                    # Transcribir
+                    # Transcribir usando OpenAI Whisper
                     try:
+                        import torch
+                        # Convertir a tensor y pasar al modelo
+                        audio_tensor = torch.from_numpy(chunk).float()
                         result = self.model.transcribe(
-                            chunk,
+                            audio_tensor,
                             language="es",
-                            fp16=False,
-                            task="transcribe"
+                            fp16=torch.cuda.is_available()
                         )
                         transcript = result.get("text", "").strip()
                         

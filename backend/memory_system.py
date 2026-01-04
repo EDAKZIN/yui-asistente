@@ -16,20 +16,27 @@ logger = logging.getLogger('Yui.Memory')
 class MemorySystem:
     """Sistema de memoria a largo plazo usando ChromaDB"""
     
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, max_session_history: int = 25):
         """
         Inicializa el sistema de memoria
         
         Args:
-            db_path: Ruta donde guardar la base de datos
+            db_path: Ruta donde guardar la base de datos (largo plazo)
+            max_session_history: Máximo de mensajes en memoria de corto plazo
         """
         self.db_path = db_path
         self.client = None
         self.collection = None
         self.embedder = None
         
+        # Memoria de corto plazo (sesión actual)
+        # Se limpia automáticamente al cerrar/reiniciar
+        self.session_history: List[Dict] = []
+        self.max_session_history = max_session_history
+        
         logger.info(f"Inicializando sistema de memoria")
         logger.info(f"  DB: {db_path}")
+        logger.info(f"  Historial de sesión: máx {max_session_history} mensajes")
     
     def load(self):
         """Carga el sistema de memoria"""
@@ -72,6 +79,66 @@ class MemorySystem:
             logger.error(f" Error al cargar sistema de memoria: {e}")
             logger.error("  Memoria deshabilitada, continuando sin ella")
             self.client = None
+    
+    # =========================================================================
+    # MEMORIA DE CORTO PLAZO (Sesión actual)
+    # =========================================================================
+    
+    def add_to_session(self, user_message: str, assistant_response: str):
+        """
+        Agrega un intercambio a la memoria de corto plazo (sesión)
+        
+        Args:
+            user_message: Mensaje del usuario
+            assistant_response: Respuesta de Yui
+        """
+        self.session_history.append({
+            "user": user_message,
+            "assistant": assistant_response
+        })
+        
+        # Mantener solo los últimos N intercambios
+        if len(self.session_history) > self.max_session_history:
+            self.session_history = self.session_history[-self.max_session_history:]
+        
+        logger.debug(f"Sesión: {len(self.session_history)} intercambios en memoria")
+    
+    def get_session_context(self, n_last: int = 5) -> str:
+        """
+        Obtiene el contexto de la sesión actual para el LLM
+        
+        Args:
+            n_last: Cuántos intercambios recientes incluir
+            
+        Returns:
+            String con el historial de la sesión
+        """
+        if not self.session_history:
+            return ""
+        
+        recent = self.session_history[-n_last:]
+        context_parts = []
+        
+        for exchange in recent:
+            context_parts.append(f"Usuario: {exchange['user']}")
+            context_parts.append(f"Yui: {exchange['assistant']}")
+        
+        return "\n".join(context_parts)
+    
+    def clear_session(self):
+        """Limpia la memoria de corto plazo (se llama al reiniciar)"""
+        self.session_history.clear()
+        logger.info("Memoria de sesión limpiada")
+    
+    def get_last_exchange(self) -> Dict:
+        """Obtiene el último intercambio de la sesión"""
+        if self.session_history:
+            return self.session_history[-1]
+        return {}
+    
+    # =========================================================================
+    # MEMORIA DE LARGO PLAZO (ChromaDB - persistente)
+    # =========================================================================
     
     def should_save(self, user_message: str, assistant_response: str) -> bool:
         """
@@ -150,7 +217,7 @@ class MemorySystem:
         except Exception as e:
             logger.error(f" Error al guardar conversación: {e}")
     
-    def search_relevant_context(self, query: str, n_results: int = 3) -> str:
+    def search_relevant_context(self, query: str, n_results: int = 10) -> str:
         """
         Busca conversaciones relevantes para un query
         
@@ -190,6 +257,66 @@ class MemorySystem:
         except Exception as e:
             logger.error(f" Error al buscar contexto: {e}")
             return ""
+    
+    def get_smart_context(self, query: str, min_relevance: float = 0.6) -> str:
+        """
+        Obtiene contexto inteligente combinando sesión + largo plazo con filtrado.
+        
+        Args:
+            query: Consulta o descripción actual
+            min_relevance: Umbral mínimo de relevancia (0-1, mayor = más estricto)
+        
+        Returns:
+            String con contexto relevante (prioriza sesión, luego largo plazo filtrado)
+        """
+        context_parts = []
+        
+        # 1. SIEMPRE incluir contexto de sesión reciente si existe (es lo más relevante)
+        session_ctx = self.get_session_context(n_last=2)
+        if session_ctx:
+            context_parts.append(f"[Conversación actual]:\n{session_ctx}")
+        
+        # 2. Buscar en largo plazo SOLO si hay alta relevancia
+        if self.client is not None and self.collection.count() > 0:
+            try:
+                query_embedding = self.embedder.encode(query).tolist()
+                
+                # Buscar con distancias para poder filtrar
+                # Buscar más resultados para tener más contexto
+                results = self.collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=10,  # Más resultados para mejor contexto
+                    include=["documents", "metadatas", "distances"]
+                )
+                
+                if results['documents'] and results['documents'][0]:
+                    for doc, meta, distance in zip(
+                        results['documents'][0], 
+                        results['metadatas'][0],
+                        results['distances'][0]
+                    ):
+                        # ChromaDB usa L2 distance - menor es mejor
+                        # Convertir a score de relevancia (0-1)
+                        relevance = 1 / (1 + distance)
+                        
+                        if relevance >= min_relevance:
+                            # Filtrar memorias genéricas/inútiles
+                            response = meta.get('assistant_response', '').lower()
+                            if any(phrase in response for phrase in [
+                                "no te entendí", "puedes repetir", "claro, dime",
+                                "en qué puedo ayudarte", "listo, abrí"
+                            ]):
+                                continue  # Skip respuestas genéricas
+                            
+                            context_parts.append(f"[Recuerdo relevante ({relevance:.0%})]: {doc}")
+                            logger.debug(f"Memoria largo plazo incluida (relevancia: {relevance:.0%})")
+                        else:
+                            logger.debug(f"Memoria descartada (relevancia: {relevance:.0%} < {min_relevance:.0%})")
+                            
+            except Exception as e:
+                logger.debug(f"Error buscando largo plazo: {e}")
+        
+        return "\n".join(context_parts) if context_parts else ""
     
     def clean_repetitive_memories(self, phrase: str, max_occurrences: int = 2) -> int:
         """

@@ -47,10 +47,10 @@ const isMac = process.platform === 'darwin';
 let backendWS: WebSocket | null = null;
 
 function connectToBackend() {
-    backendWS = new WebSocket('ws://localhost:8765');
+    backendWS = new WebSocket('ws://localhost:58765');
 
     backendWS.on('open', () => {
-        console.log('[Backend WS] Conectado a ws://localhost:8765');
+        console.log('[Backend WS] Conectado a ws://localhost:58765');
     });
 
     backendWS.on('error', (err) => {
@@ -145,9 +145,9 @@ function createControlWindow(): void {
     }
 
     controlWindow = new BrowserWindow({
-        width: 450,
+        width: 550,
         height: 700,
-        minWidth: 350,
+        minWidth: 450,
         minHeight: 500,
         resizable: true,
         frame: true,
@@ -286,6 +286,19 @@ function createTray(): void {
             }
         },
         { type: 'separator' },
+        {
+            label: 'Reiniciar',
+            click: () => {
+                // Enviar comando de shutdown al backend via WebSocket
+                if (backendWS && backendWS.readyState === WebSocket.OPEN) {
+                    backendWS.send(JSON.stringify({ action: 'shutdown' }));
+                }
+                // Dar tiempo para que el backend reciba el mensaje
+                setTimeout(() => {
+                    app.quit();
+                }, 500);
+            }
+        },
         { label: 'Salir', click: () => app.quit() }
     ]);
 

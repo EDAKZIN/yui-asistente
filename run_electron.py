@@ -57,7 +57,7 @@ def run_with_electron():
         api = YuiGUIAPI(yui, listener)
         
         # Crear servidor WebSocket
-        ws_server = YuiWebSocketServer(api, host='localhost', port=8765)
+        ws_server = YuiWebSocketServer(api, host='localhost', port=58765)
         
         # Conectar API de notificaciones
         def setup_ws_notifications():
@@ -85,11 +85,15 @@ def run_with_electron():
             def new_notify_tts_complete(text: str):
                 ws_server.notify_tts_complete(text)
             
+            def new_notify_expression(expression_name: str):
+                ws_server.notify_expression(expression_name)
+            
             api.notify_state_change = new_notify_state
             api.notify_transcript = new_notify_transcript
             api.notify_response = new_notify_response
             api.notify_error = new_notify_error
             api.notify_tts_start = new_notify_tts_start  # CRÍTICO: Conectar callback
+            api.notify_expression = new_notify_expression  # Conectar expresiones
             
             # Conectar callbacks de TTS
             yui.tts.set_synthesis_complete_callback(new_notify_tts_complete)
@@ -101,7 +105,7 @@ def run_with_electron():
         
         # Iniciar WebSocket server en thread
         logger.info("Iniciando servidor WebSocket...")
-        print(">>> Iniciando WebSocket server en ws://localhost:8765...")
+        print(">>> Iniciando WebSocket server en ws://localhost:58765...")
         ws_thread = ws_server.start_in_thread()
         time.sleep(1.0)  # Esperar que inicie
         print(">>> WebSocket server iniciado")
@@ -131,7 +135,7 @@ def run_with_electron():
         print("YUI AI ASSISTANT - ELECTRON MODE")
         print("=" * 60)
         print("  • Desktop Pet activo en la bandeja del sistema")
-        print("  • WebSocket escuchando en ws://localhost:8765")
+        print("  • WebSocket escuchando en ws://localhost:58765")
         print("  • Presiona Ctrl+C para salir")
         print("=" * 60 + "\n")
         
@@ -163,6 +167,10 @@ def run_with_electron():
             else:
                 os.killpg(os.getpgid(electron_process.pid), signal.SIGTERM)
             electron_process.wait(timeout=5)
+
+        logger.info("Proceso terminado limpiamente")
+        # Forzar salida inmediata para evitar bloqueos por multiprocessing
+        os._exit(0)
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:8765">
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:58765">
     <title>Yui Desktop Pet</title>
     <style>
         * {
@@ -108,6 +108,10 @@
         }
 
         .translucent-mode #live2d-canvas {
+            opacity: 0.3;
+        }
+
+        .translucent-mode #subtitle-text {
             opacity: 0.3;
         }
 
@@ -488,9 +492,9 @@
         let wsReconnectCount = 0;
         function connectSubtitleWebSocket() {
             wsReconnectCount++;
-            console.log(`[Subtítulos] Intento de conexión WebSocket #${wsReconnectCount} a ws://localhost:8765`);
+            console.log(`[Subtítulos] Intento de conexión WebSocket #${wsReconnectCount} a ws://localhost:58765`);
 
-            ws = new WebSocket('ws://localhost:8765');
+            ws = new WebSocket('ws://localhost:58765');
             window.ws = ws; // Exponer globalmente para mute global
 
             ws.onopen = () => {
@@ -543,6 +547,29 @@
                     else if (message.type === 'tts_complete') {
                         // TTS completó - ya se ocultó por timeout, no hacer nada
                         console.log('[Subtítulos] TTS completado');
+                    }
+                    else if (message.type === 'set_expression') {
+                        // Cambiar expresion del modelo Live2D
+                        const expressionName = message.data?.name || '';
+                        if (currentModel && expressionName) {
+                            try {
+                                const expManager = currentModel.internalModel?.motionManager?.expressionManager;
+                                if (expManager) {
+                                    // Limpiar expresiones acumuladas primero
+                                    expManager.resetExpression?.();
+
+                                    // Aplicar nueva expresion si no es neutral
+                                    if (expressionName !== 'neutral') {
+                                        expManager.setExpression(expressionName);
+                                        console.log('[Expresion] Aplicada:', expressionName);
+                                    } else {
+                                        console.log('[Expresion] Reset a neutral');
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[Expresion] Error aplicando:', e);
+                            }
+                        }
                     }
                 } catch (e) {
                     console.error('[Subtítulos] Error:', e);

@@ -8,8 +8,9 @@ import logging
 from datetime import datetime
 from typing import Tuple, Optional
 
-# SearxNG Search (reemplaza DuckDuckGo)
-from web_search import web_search as searx_web_search
+from web_search import web_search
+
+# Vision deshabilitada (Gemini removido)
 
 logger = logging.getLogger('Yui.Commands')
 
@@ -147,14 +148,30 @@ SYSTEM_APPS = {
     # Solo como fallback si AppOpener falla
 }
 
+# Apps con rutas directas (cuando AppOpener no las encuentra bien)
+# Se intentan estas rutas antes de usar AppOpener
+DIRECT_APP_PATHS = {
+    'roblox': {
+        'type': 'uwp',  # Universal Windows Platform app
+        'app_id': 'ROBLOXCORPORATION.ROBLOX',
+    },
+    'minecraft': {
+        'type': 'uwp',
+        'app_id': 'Microsoft.MinecraftUWP',
+    },
+}
+
 
 class CommandExecutor:
     """Ejecuta comandos de voz con filtros de seguridad"""
     
     def __init__(self):
-        logger.info("Inicializando módulo de comandos")
+        logger.info("Inicializando modulo de comandos")
         logger.info(f"  Apps bloqueadas: {len(BLOCKED_APPS)}")
         logger.info(f"  Aliases configurados: {len(APP_ALIASES)}")
+        
+        # Vision deshabilitada
+        pass
     
     def is_blocked(self, app_name: str) -> bool:
         """
@@ -172,6 +189,70 @@ class CommandExecutor:
         for blocked in BLOCKED_APPS:
             if blocked in app_lower or app_lower in blocked:
                 return True
+        
+        return False
+    
+    def _try_direct_app(self, app_name: str) -> bool:
+        """
+        Intenta abrir una app usando rutas directas (UWP, shell, etc.)
+        
+        Args:
+            app_name: Nombre de la app (en minúsculas)
+            
+        Returns:
+            True si logró abrirla, False si no está en DIRECT_APP_PATHS
+        """
+        import subprocess
+        
+        if app_name not in DIRECT_APP_PATHS:
+            return False
+        
+        config = DIRECT_APP_PATHS[app_name]
+        
+        try:
+            if config['type'] == 'uwp':
+                # Abrir app UWP usando PowerShell
+                app_id = config['app_id']
+                logger.info(f"Abriendo UWP app: {app_id}")
+                
+                # Buscar la app UWP y obtener su AppUserModelId
+                ps_script = f'''
+                $app = Get-AppxPackage | Where-Object {{ $_.Name -like "*{app_id}*" }} | Select-Object -First 1
+                if ($app) {{
+                    $familyName = $app.PackageFamilyName
+                    Start-Process "shell:AppsFolder\\$familyName!App"
+                    exit 0
+                }} else {{
+                    exit 1
+                }}
+                '''
+                result = subprocess.run(
+                    ['powershell', '-ExecutionPolicy', 'Bypass', '-Command', ps_script],
+                    capture_output=True, text=True, timeout=10
+                )
+                
+                if result.returncode == 0:
+                    logger.info(f"UWP app abierta: {app_name}")
+                    return True
+                else:
+                    logger.warning(f"UWP app no encontrada: {app_id}")
+                    return False
+                    
+            elif config['type'] == 'exe':
+                # Abrir ejecutable directo
+                exe_path = config['path']
+                if os.path.exists(exe_path):
+                    subprocess.Popen([exe_path])
+                    logger.info(f"App abierta por ruta directa: {exe_path}")
+                    return True
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout abriendo {app_name}")
+            return False
+        except Exception as e:
+            logger.error(f"Error abriendo {app_name} directamente: {e}")
+            return False
         
         return False
     
@@ -206,7 +287,12 @@ class CommandExecutor:
             return False, f"No puedo abrir '{app_name}' por seguridad"
         
         try:
-            # 1. Primero verificar si es una app del sistema (se abre con subprocess)
+            # 0. NUEVO: Intentar ruta directa primero para apps problemáticas
+            direct_result = self._try_direct_app(app_lower)
+            if direct_result:
+                return True, f"Listo, abrí {app_name}"
+            
+            # 1. Verificar si es una app del sistema (se abre con subprocess)
             if resolved_name in SYSTEM_APPS:
                 exe_path = SYSTEM_APPS[resolved_name]
                 logger.info(f"Abriendo app del sistema: {resolved_name} -> {exe_path}")
@@ -296,7 +382,18 @@ class CommandExecutor:
             Tupla (éxito, resultados resumidos)
         """
         logger.debug(f"web_search llamado con query: '{query}'")
-        return searx_web_search(query)
+        return web_search(query)
+    
+    def describe_screen(self) -> Tuple[bool, str]:
+        """
+        Describe lo que Yui ve en la pantalla
+        NOTA: Visión deshabilitada (Gemini removido)
+        
+        Returns:
+            Tupla (exito, mensaje)
+        """
+        logger.info("Comando de visión recibido pero está deshabilitado")
+        return False, "Lo siento, mi visión no está disponible en este momento."
     
     def execute(self, command_type: str, params: Optional[str] = None) -> Tuple[bool, str]:
         """

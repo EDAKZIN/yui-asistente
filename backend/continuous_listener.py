@@ -6,6 +6,7 @@ Integra VAD, wake word, y máquina de estados para escucha activa
 import time
 import threading
 import logging
+import random
 from typing import Optional
 import numpy as np
 
@@ -13,6 +14,8 @@ from state_machine import YuiStateMachine, YuiState
 from vad_listener import VADListener
 from wake_word import WhisperWakeWordDetector, SimpleNameDetector
 from reminders import ReminderSystem
+from emotion_detector import EmotionDetector
+from special_events import SpecialEventsSystem
 
 logger = logging.getLogger('Yui.Continuous')
 
@@ -80,12 +83,32 @@ class ContinuousListener:
         self.is_running = False
         self._proactive_thread = None
         self._stop_event = threading.Event()
+        self._is_waking = False  # Flag para indicar que estamos en proceso de despertar
+        
+        # Referencia a command_executor (se setea después)
+        self.command_executor = None
         
         # Audio del habla actual
         self._current_speech_audio: Optional[np.ndarray] = None
         
         # Sistema de recordatorios
         self.reminders = ReminderSystem(on_reminder_triggered=self._on_reminder_triggered)
+        
+        # Detector de emociones para expresiones del modelo
+        self.emotion_detector = EmotionDetector()
+        
+        # Mapeo de emociones a expresiones del modelo (se puede configurar)
+        self.emotion_to_expression = {
+            'happy': 'qizi1',
+            'sad': 'cry',
+            'angry': 'angry',
+            'fear': 'white eyes',
+            'surprise': 'baozhen',
+            'neutral': 'neutral'
+        }
+        
+        # Sistema de eventos especiales (Navidad, cumpleanos, etc.)
+        self.special_events = SpecialEventsSystem(on_event_triggered=self._on_special_event)
         
         # Referencia al GUI API (para enviar actualizaciones al frontend)
         self.gui_api = None
@@ -115,6 +138,25 @@ class ContinuousListener:
             except Exception as e:
                 logger.debug(f"Error notificando GUI: {e}")
     
+    def _detect_and_apply_expression(self, response_text: str):
+        """Detecta emocion en la respuesta y aplica expresion al modelo"""
+        try:
+            # Detectar emocion
+            emotion = self.emotion_detector.detect(response_text)
+            
+            # Mapear a expresion del modelo
+            expression = self.emotion_to_expression.get(emotion, 'neutral')
+            
+            logger.info(f"Emocion detectada: {emotion} -> expresion: {expression}")
+            
+            # Enviar al frontend
+            self._notify_gui('notify_expression', expression)
+            
+        except Exception as e:
+            logger.warning(f"Error detectando/aplicando expresion: {e}")
+            # En caso de error, aplicar neutral
+            self._notify_gui('notify_expression', 'neutral')
+    
     def _on_state_change(self, old_state: YuiState, new_state: YuiState):
         """Callback cuando cambia el estado"""
         logger.info(f"Estado cambiado: {old_state.value} → {new_state.value}")
@@ -125,40 +167,94 @@ class ContinuousListener:
         """Callback al entrar en modo reposo"""
         logger.info("Entrando en modo REPOSO - liberando recursos...")
         
+        # Log VRAM inicial
+        try:
+            import torch
+            if torch.cuda.is_available():
+                vram_inicial = torch.cuda.memory_allocated(0) / 1024**3
+                logger.info(f"  VRAM al inicio de reposo: {vram_inicial:.2f}GB")
+        except:
+            pass
+        
+        # Ejecutar reflexión ANTES de descargar el LLM
+        try:
+            if hasattr(self.yui, 'reflection') and self.yui.reflection:
+                logger.info("  Ejecutando reflexión antes de dormir...")
+                insights = self.yui.reflection.reflect_on_session()
+                if insights:
+                    logger.info(f"  Reflexión completada: {len(insights)} insights guardados")
+        except Exception as e:
+            logger.error(f"Error en reflexión: {e}")
+        
         # Detener VAD
         self.vad.stop()
         
-        # Descargar modelos pesados para liberar VRAM
+        # Descargar modelos pesados para liberar VRAM/RAM
+        import torch
+        import gc
+        
         try:
-            # Descargar LLM
-            if hasattr(self.yui, 'llama') and self.yui.llama.model is not None:
-                logger.info("  Descargando modelo LLM...")
-                del self.yui.llama.model
-                self.yui.llama.model = None
-                if hasattr(self.yui.llama, 'tokenizer'):
-                    del self.yui.llama.tokenizer
-                    self.yui.llama.tokenizer = None
-                
-            # Descargar TTS (CoquiTTS usa 'tts' no 'model')
-            if hasattr(self.yui, 'tts') and hasattr(self.yui.tts, 'tts') and self.yui.tts.tts is not None:
-                logger.info("  Descargando modelo TTS...")
-                del self.yui.tts.tts
-                self.yui.tts.tts = None
+            # 1. Descargar LLM (Llama o Groq)
+            if hasattr(self.yui, 'groq') and self.yui.groq is not None and hasattr(self.yui.groq, 'unload'):
+                logger.info("  Descargando cliente Groq...")
+                self.yui.groq.unload()
             
-            # Limpiar cache CUDA
-            import torch
-            import gc
+            if hasattr(self.yui, 'llama') and self.yui.llama is not None and self.yui.llama.model is not None:
+                logger.info("  Descargando modelo LLM local...")
+                self.yui.llama.unload_model()
+                gc.collect()
+                torch.cuda.empty_cache()
+                vram_post_llm = torch.cuda.memory_allocated(0) / 1024**3
+                logger.info(f"  VRAM después de descargar LLM: {vram_post_llm:.2f}GB")
+
+            # 2. Detener proceso TTS (libera toda la VRAM del TTS)
+            if hasattr(self.yui, 'tts') and self.yui.tts is not None:
+                logger.info("  Deteniendo proceso TTS...")
+                self.yui.tts.shutdown()
+                gc.collect()
+                torch.cuda.empty_cache()
+                vram_post_tts = torch.cuda.memory_allocated(0) / 1024**3
+                logger.info(f"  VRAM después de detener TTS: {vram_post_tts:.2f}GB")
+            
+            # 3. Descargar Whisper STT (libera ~1.5GB VRAM)
+            if hasattr(self.yui, 'whisper') and self.yui.whisper is not None:
+                logger.info("  Descargando modelo Whisper STT...")
+                self.yui.whisper.unload_model()
+                gc.collect()
+                torch.cuda.empty_cache()
+                vram_post_whisper = torch.cuda.memory_allocated(0) / 1024**3
+                logger.info(f"  VRAM después de descargar Whisper: {vram_post_whisper:.2f}GB")
+            
+            # Limpiar cache CUDA agresivamente
             gc.collect()
+            gc.collect()  # Doble collect
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
-                logger.info("  Cache CUDA liberada")
+                vram_final = torch.cuda.memory_allocated(0) / 1024**3
+                vram_reserved = torch.cuda.memory_reserved(0) / 1024**3
+                logger.info(f"  VRAM final: {vram_final:.2f}GB (reservada por PyTorch: {vram_reserved:.2f}GB)")
             
         except Exception as e:
             logger.error(f"Error descargando modelos: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
         
-        # Iniciar wake word detector
-        self.wake_detector.start()
+        # Iniciar wake word detector (carga Whisper base ~1GB)
+        # Solo si no estamos muteados
+        if self.gui_api and self.gui_api._is_muted:
+            logger.info("  Modo muteado activo - wake detector NO iniciado")
+        else:
+            logger.info("  Iniciando wake word detector...")
+            self.wake_detector.start()
+        
+        # Log VRAM con wake detector
+        try:
+            if torch.cuda.is_available():
+                vram_con_wake = torch.cuda.memory_allocated(0) / 1024**3
+                logger.info(f"  VRAM con wake detector: {vram_con_wake:.2f}GB")
+        except:
+            pass
         
         logger.info("Modo REPOSO activo - solo escuchando wake word")
     
@@ -166,6 +262,9 @@ class ContinuousListener:
         """Callback al despertar del modo reposo"""
         logger.info("Despertando del modo REPOSO...")
         print("\n[DESPERTANDO...]")
+        
+        # CRÍTICO: Bloquear comentarios proactivos mientras recargamos modelos
+        self._is_waking = True
         
         # Notificar GUI que estamos despertando
         self._notify_gui('notify_state_change', 'waking')
@@ -178,25 +277,44 @@ class ContinuousListener:
         except Exception as e:
             logger.error(f"  Error deteniendo wake word detector: {e}")
         
-        # Descargar modelo wake word para liberar VRAM
+        # Descargar modelo wake word para liberar VRAM (ahora usa OpenAI Whisper, no crash)
         logger.info("  Descargando modelo Whisper base (wake word)...")
         try:
             self.wake_detector.unload_model()
-            logger.debug("  Modelo wake word descargado correctamente")
+            logger.info("  Modelo wake word descargado correctamente")
         except Exception as e:
             logger.error(f"  Error descargando modelo wake word: {e}")
         
-        # Recargar modelos principales
+        # Recargar modelos principales según el modo previo
         try:
             logger.info("  Recargando modelo Whisper medium (STT)...")
             print("  Recargando Whisper...")
             self.yui.whisper.load_model()
-            logger.debug("  Whisper recargado correctamente")
             
-            logger.info("  Recargando modelo LLM...")
-            print("  Recargando LLM...")
-            self.yui.llama.load_model()
-            logger.debug("  LLM recargado correctamente")
+            # RESTAURAR ESTADO EXACTO (Local o Groq)
+            if self.yui.performance_mode:
+                logger.info("  Despertando en MODO RENDIMIENTO (Groq)...")
+                print("  Conectando a Groq (Modo Rendimiento)...")
+                # Asegurar que la instancia de Groq exista
+                if self.yui.groq is None:
+                    try:
+                        from groq_llm import GroqLLM
+                        self.yui.groq = GroqLLM()
+                    except ImportError as e:
+                        logger.error(f"No se pudo importar GroqLLM: {e}")
+                        self.yui.performance_mode = False
+                
+                if self.yui.groq.load():
+                    logger.info("  Groq recargado correctamente")
+                else:
+                    logger.warning("  Fallo al recargar Groq, volviendo a local...")
+                    self.yui.performance_mode = False
+                    self.yui.llama.load_model()
+            else:
+                logger.info("  Despertando en MODO LOCAL (Llama)...")
+                print("  Recargando LLM Local...")
+                self.yui.llama.load_model()
+                logger.debug("  LLM recargado correctamente")
             
             logger.info("  Recargando modelo TTS...")
             print("  Recargando TTS...")
@@ -226,6 +344,9 @@ class ContinuousListener:
             import traceback
             logger.error(f"Traceback:\n{traceback.format_exc()}")
         
+        # Liberar flag - modelos cargados, listo para comentarios proactivos
+        self._is_waking = False
+        
         logger.info("Modo ACTIVO restaurado")
         print("[ACTIVO - Listo para escuchar]\n")
     
@@ -250,7 +371,7 @@ class ContinuousListener:
 Ya pasó el tiempo y ahora debes AVISARLE que es momento de hacerlo.
 Responde de forma amigable y breve (1-2 oraciones) recordándole que debe: {reminder.message}
 NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
-                response = self.yui.llama.generate_response(prompt)
+                response = self.yui.get_current_llm().generate_response(prompt)
                 
                 # Verificar que no sea una respuesta confusa
                 if 'minutos' in response.lower() and 'recordar' in response.lower():
@@ -269,8 +390,8 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
         # Sintetizar con TTS
         logger.info(f"Recordatorio - intentando sintetizar: '{response[:50]}...'")
         try:
-            # CoquiTTS usa 'tts' no 'model'
-            if self.yui.tts.tts:
+            # Cliente TTS WebSocket
+            if self.yui.tts:
                 logger.debug("TTS disponible, sintetizando...")
                 self.yui.tts.synthesize(response)
                 logger.info("Recordatorio sintetizado correctamente")
@@ -280,6 +401,27 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
             logger.error(f"Error sintetizando recordatorio: {e}")
             import traceback
             logger.error(traceback.format_exc())
+    
+    def _on_special_event(self, message: str, expression: str):
+        """Callback cuando se dispara un evento especial (Navidad, cumpleanos, etc.)"""
+        logger.info(f"Evento especial activado: {message[:50]}...")
+        
+        print(f"\n[EVENTO ESPECIAL] Yui: {message}")
+        self._notify_gui('notify_response', message)
+        
+        # Aplicar expresion correspondiente
+        expr_name = self.emotion_to_expression.get(expression, 'qizi1')
+        self._notify_gui('notify_expression', expr_name)
+        
+        # Sintetizar con TTS
+        try:
+            if self.yui.tts:
+                self.yui.tts.synthesize(message)
+                logger.info("Evento especial sintetizado correctamente")
+            else:
+                logger.warning("TTS no disponible para evento especial")
+        except Exception as e:
+            logger.error(f"Error sintetizando evento especial: {e}")
     
     def _on_speech_end(self, audio: np.ndarray):
         """Callback cuando termina el habla"""
@@ -376,15 +518,29 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
             
             self._notify_gui('notify_response', response)
             
+            # Detectar emocion y aplicar expresion al modelo
+            self._detect_and_apply_expression(response)
+            
             self.yui.tts.synthesize(response)
             
             # 6. Auto-limpiar memoria si respuesta es repetitiva
             self.yui.memory.auto_clean_if_repetitive(response)
             
-            # 7. Guardar en memoria
+            # 7. Guardar en memoria de CORTO PLAZO (sesión) para continuidad
+            self.yui.memory.add_to_session(transcript, response)
+            
+            # 8. Guardar en memoria de LARGO PLAZO (ChromaDB) si es relevante
             self.yui.memory.add_conversation(transcript, response)
             
-            # 7. Volver a estado activo
+            # 9. Actualizar contexto de conversación para detección de continuidad
+            response_keywords = self._extract_keywords(response.lower())
+            if hasattr(self, '_last_conversation_keywords'):
+                self._last_conversation_keywords.update(response_keywords)
+            else:
+                self._last_conversation_keywords = response_keywords
+            self._last_yui_mention_time = time.time()  # Renovar tiempo de conversación
+            
+            # 10. Volver a estado activo
             self.state_machine.reset_activity()
             self.state_machine.transition_to(YuiState.ACTIVE)
             
@@ -421,6 +577,18 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
         if not hasattr(self, '_last_conversation_keywords') or not self._last_conversation_keywords:
             return True  # Sin contexto previo, aceptar
         
+        # NUEVO: Si Yui hizo una pregunta en su última respuesta, aceptar cualquier respuesta
+        try:
+            last_exchange = self.yui.memory.get_last_exchange()
+            if last_exchange:
+                last_yui_response = last_exchange.get('assistant', '').lower()
+                # Si la última respuesta fue una pregunta, aceptar la respuesta del usuario
+                if '?' in last_yui_response:
+                    logger.debug("Aceptando respuesta porque Yui hizo una pregunta")
+                    return True
+        except:
+            pass  # Sin memoria de sesión, continuar con lógica normal
+        
         current_keywords = self._extract_keywords(text)
         
         # Verificar si comparten al menos una palabra clave
@@ -429,12 +597,22 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
             logger.debug(f"Palabras compartidas: {shared}")
             return True
         
-        # Frases de continuación que siempre son válidas
+        # Frases de continuación que siempre son válidas (respuestas a preguntas, etc.)
         continuation_phrases = [
+            # Conectores
             "y ", "pero ", "entonces ", "además ", "también ",
+            # Confirmaciones
             "gracias", "ok", "vale", "entendido", "perfecto",
-            "sí", "no", "claro", "bien", "bueno",
+            "sí", "no", "claro", "bien", "bueno", "ajá", "aja",
+            # Repetición
             "repite", "otra vez", "de nuevo", "qué dijiste",
+            # Respuestas a opciones (como "A o B?")
+            "el primero", "el segundo", "la primera", "la segunda",
+            "uno", "dos", "tres", "ninguno", "ambos", "todos",
+            "ese", "esa", "eso", "esto", "aquel", "aquella",
+            # Respuestas cortas típicas
+            "como ", "así ", "del ", "de la ", "en el ", "en la ",
+            "lo que ", "eso que ", "lo de ", "la de ", "el de ",
         ]
         
         for phrase in continuation_phrases:
@@ -509,35 +687,76 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
         """Callback cuando se detecta wake word"""
         logger.info("¡Wake word detectado!")
         
-        # Obtener respuesta de despertar
-        response = self.state_machine.get_wake_response()
+        # CRÍTICO: Ejecutar en thread separado para no bloquear el wake detector
+        # Esto evita conflictos al descargar el modelo mientras estamos en su callback
+        def _wake_async():
+            try:
+                # Obtener respuesta de despertar
+                response = self.state_machine.get_wake_response()
+                
+                # Despertar (esto recarga los modelos)
+                self.state_machine.transition_to(YuiState.ACTIVE)
+                
+                # Responder (ahora TTS está cargado)
+                print(f"\nYui: {response}")
+                self.yui.tts.synthesize(response)
+            except Exception as e:
+                logger.error(f"Error en despertar async: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
         
-        # Despertar
-        self.state_machine.transition_to(YuiState.ACTIVE)
-        
-        # Responder
-        print(f"\nYui: {response}")
-        self.yui.tts.synthesize(response)
+        wake_thread = threading.Thread(target=_wake_async, daemon=True)
+        wake_thread.start()
     
     def _proactive_loop(self):
-        """Loop para comentarios proactivos"""
-        logger.info("Iniciando loop de comentarios proactivos")
+        """Loop para comentarios proactivos GENERADOS por LLM"""
+        logger.info("Iniciando loop de comentarios proactivos (LLM)")
         
         while not self._stop_event.is_set():
             try:
-                # Esperar un poco
-                time.sleep(10)  # Verificar cada 10 segundos
+                # Esperar un poco (interrumpible)
+                if self._stop_event.wait(timeout=10):
+                    break
+                
+                # NO hacer comentarios si estamos despertando (modelos no cargados aún)
+                if self._is_waking:
+                    continue
                 
                 # Verificar si debe hacer comentario proactivo
                 if self.proactive_enabled and self.state_machine.should_make_proactive_comment():
                     # Cambiar a estado PROACTIVE
                     self.state_machine.transition_to(YuiState.PROACTIVE)
                     
-                # Generar comentario proactivo
-                    comment = self.state_machine.get_proactive_comment()
-                    if comment:
-                        print(f"\nYui (proactivo): {comment}")
-                        self.yui.tts.synthesize(comment)
+                    # Obtener contexto de memoria para "estado emocional"
+                    # Usa get_smart_context que PRIORIZA la sesión actual sobre memoria antigua
+                    memory_context = ""
+                    try:
+                        memory_context = self.yui.memory.get_smart_context(
+                            "conversación actual con el usuario", min_relevance=0.7
+                        )
+                    except:
+                        pass
+                    
+                    # Generar comentario dinámico usando LLM
+                    prompt = f"""Eres Yui. El usuario no te ha hablado en un rato.
+{f"[Recuerdos recientes]: {memory_context}" if memory_context else ""}
+
+Genera UN comentario breve y natural (1 oración) que refleje tu personalidad:
+- Puedes estar aburrida, curiosa, juguetona, o reflexiva
+- Si tienes recuerdos interesantes, menciona algo relacionado
+- Si no, simplemente comenta sobre estar esperando o pregunta algo casual
+- NO uses frases genéricas como "¿en qué te ayudo?"
+- NO uses *expresiones* (como *sonríe*), son automáticas
+- Sé natural y única cada vez."""
+
+                    try:
+                        comment = self.yui.get_current_llm().generate_response(prompt, use_history=False)
+                        if comment:
+                            self.state_machine.proactive_comment_count += 1
+                            print(f"\nYui: {comment}")
+                            self.yui.tts.synthesize(comment)
+                    except Exception as e:
+                        logger.error(f"Error generando comentario proactivo: {e}")
                     
                     # Resetear timer
                     self.state_machine.last_activity_time = time.time()
@@ -549,6 +768,8 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
                 logger.error(f"Error en loop proactivo: {e}")
         
         logger.info("Loop proactivo terminado")
+    
+
     
     def start(self):
         """Inicia el modo de escucha continua"""
@@ -576,8 +797,13 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
             )
             self._proactive_thread.start()
         
+
+        
         # Iniciar sistema de recordatorios
         self.reminders.start()
+        
+        # Iniciar sistema de eventos especiales (Navidad, cumpleanos, etc.)
+        self.special_events.start()
         
         self.is_running = True
         
@@ -613,6 +839,13 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
         
         # Detener sistema de recordatorios
         self.reminders.stop()
+        
+        # Detener sistema de eventos especiales
+        self.special_events.stop()
+        
+        # Detener TTS completamente (libera threads de audio)
+        if hasattr(self.yui, 'tts'):
+            self.yui.tts.shutdown()
         
         self.is_running = False
         logger.info("Escucha continua detenida")

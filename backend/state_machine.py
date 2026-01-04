@@ -22,46 +22,7 @@ class YuiState(Enum):
     SLEEPING = "sleeping"      # Modo reposo (bajo recursos)
 
 
-# Frases para comentarios proactivos - variadas y naturales
-PROACTIVE_COMMENTS = [
-    # Aburrimiento
-    "¿Sigues ahí? Me estoy aburriendo...",
-    "Oye, ¿todo bien? Llevas rato sin decir nada.",
-    "*bostezo* ...Avísame si me necesitas.",
-    "Hmm... el silencio es incómodo.",
-    "¿Te quedaste dormido o qué?",
-    "Bueno, aquí sigo esperando...",
-    "El silencio me aburre, ¿sabes?",
-    "*suspiro* Qué aburrido está esto.",
-    
-    # Disponibilidad
-    "¿Necesitas algo? Estoy aquí.",
-    "Si necesitas algo, solo dilo.",
-    "Sigo aquí, por si acaso.",
-    "Cuando me necesites, aquí estaré.",
-    "Solo di mi nombre si me necesitas.",
-    "Aquí ando, esperándote.",
-    
-    # Curiosidad
-    "¿Qué estarás haciendo?",
-    "Me pregunto en qué andas...",
-    "¿Todo en orden por allá?",
-    "¿Sigues trabajando o ya te distrajiste?",
-    "Oye, ¿se te ofrece algo?",
-    
-    # Juguetona
-    "¿Me ignorás o qué onda?",
-    "¡Ey! No me dejes hablando sola.",
-    "¿Hola? ¿Hay alguien ahí?",
-    "*toc toc* ¿Alguien en casa?",
-    "No me vayas a olvidar, ¿eh?",
-    
-    # Con humor
-    "Si no me hablas me voy a oxidar...",
-    "¿Sabes que existo, verdad?",
-    "Empiezo a pensar que soy invisible.",
-    "¿Debería empezar a cantar para llamar tu atención?",
-]
+# NOTA: Comentarios proactivos ahora se generan dinámicamente con LLM en continuous_listener.py
 
 # Frases para entrar en reposo
 SLEEP_TRIGGERS = [
@@ -170,31 +131,7 @@ class YuiStateMachine:
         
         return self.get_inactivity_duration() >= self.inactivity_timeout
     
-    def get_proactive_comment(self) -> str:
-        """Obtiene un comentario proactivo evitando repetir los últimos"""
-        self.proactive_comment_count += 1
-        
-        # Evitar repetir los últimos comentarios usados
-        if not hasattr(self, '_used_comments'):
-            self._used_comments = []
-        
-        # Filtrar comentarios no usados recientemente
-        available = [c for c in PROACTIVE_COMMENTS if c not in self._used_comments]
-        
-        # Si ya usamos muchos, resetear
-        if len(available) < 5:
-            self._used_comments = []
-            available = PROACTIVE_COMMENTS
-        
-        comment = random.choice(available)
-        self._used_comments.append(comment)
-        
-        # Mantener solo los últimos 10 usados
-        if len(self._used_comments) > 10:
-            self._used_comments = self._used_comments[-10:]
-        
-        logger.info(f"Comentario proactivo #{self.proactive_comment_count}: {comment[:30]}...")
-        return comment
+    # NOTA: get_proactive_comment() eliminado - ahora se genera dinámicamente con LLM en continuous_listener.py
     
     def check_sleep_trigger(self, text: str) -> bool:
         """

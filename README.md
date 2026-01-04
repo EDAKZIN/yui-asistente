@@ -1,10 +1,10 @@
 # 🎤 Yui AI Assistant
 
-**Yui** es una asistente de voz con inteligencia artificial creada por **EDAKZIN**. Combina reconocimiento de voz, generacion de lenguaje natural y clonacion de voz para ofrecer una experiencia conversacional unica con subtitulos sincronizados.
+**Yui** es una asistente de voz con inteligencia artificial creada por **EDAKZIN**. Combina reconocimiento de voz, generacion de lenguaje natural y clonacion de voz para ofrecer una experiencia conversacional unica con subtitulos sincronizados y expresiones faciales dinamicas.
 
 ## Caracteristicas
 
-- **STT (Speech-to-Text)**: OpenAI Whisper "medium" con GPU
+- **STT (Speech-to-Text)**: faster-whisper "medium" con INT8 (optimizado)
 - **LLM**: Llama 3.2 3B con cuantizacion 4-bit (~2.5GB VRAM)
 - **TTS con clonacion de voz**: Coqui XTTS v2
 - **Memoria selectiva**: ChromaDB con filtrado inteligente
@@ -12,16 +12,20 @@
 - **Busqueda web**: Brave Search API con contexto de fecha
 - **Personalidad unica**: Amigable por defecto, sarcastica si la provocan
 - **Desktop Pet**: Mascota Live2D con Electron + Panel de Control
+- **Expresiones faciales**: Detecta emociones y cambia expresiones automaticamente
+- **Eventos especiales**: Felicita en Navidad, Ano Nuevo, cumpleanos
 - **Subtitulos sincronizados**: Aparecen exactamente cuando el audio empieza
 - **Recordatorios**: Sistema de recordatorios por voz
 - **Comentarios proactivos**: Yui comenta cuando llevas tiempo sin hablar
+- **Modo reposo**: Di "descansa" para liberar VRAM, di "Yui" para despertar
+- **Gestión automática de VRAM**: Los modelos se descargan/cargan según el estado
 - **Configuracion desde tray**: Ajusta escala, subtitulos y mas desde el menu
 
 ## 🚀 Pipeline
 
 ```
-Usuario → Whisper → Comandos/LLM → XTTS v2 → Audio
-  habla   (medium)   (detecta)     (Navia)   (respuesta)
+Usuario → faster-whisper → Comandos/LLM → Emociones → XTTS v2 → Audio
+  habla    (medium INT8)    (detecta)     (expresion)  (Navia)    (respuesta)
 ```
 
 ## 📋 Requisitos
@@ -29,31 +33,57 @@ Usuario → Whisper → Comandos/LLM → XTTS v2 → Audio
 - Python 3.11+
 - Node.js 18+ (para Electron)
 - NVIDIA GPU con CUDA (RTX 3060 o superior recomendado)
-- ~8GB VRAM total durante ejecucion
+- ~7GB VRAM total durante ejecucion (optimizado con INT8)
 - Windows 10/11
 
 ## 🔧 Instalacion
 
-### Backend (Python)
-```powershell
-# Clonar repositorio
-git clone https://github.com/EDAKZIN/yui-assistant.git
-cd yui-assistant
+### Arquitectura
+```
+yui-asistente/
+├── venv/                  # Backend principal (LLM, STT, WebSocket)
+├── tts-service/
+│   └── venv_tts/          # Microservicio TTS (DeepSpeed + Coqui)
+├── backend/               # Código Python
+├── desktop-pet/           # Frontend Electron
+└── start_yui.bat          # Script de inicio
+```
 
+### Backend Principal (Python)
+```powershell
 # Crear entorno virtual
 python -m venv venv
 .\venv\Scripts\activate
 
-# Instalar PyTorch con CUDA primero
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-
-# Instalar dependencias Python
+# Instalar dependencias
 pip install -r requirements.txt
 
 # Configurar variables de entorno
 copy .env.example .env
-# Edita .env y agrega tu BRAVE_API_KEY
+# Edita .env y agrega tu BRAVE_API_KEY y GROQ_API_KEY
 ```
+
+### TTS Microservicio
+```powershell
+cd tts-service
+py -3.11 -m venv venv_tts
+.\venv_tts\Scripts\activate
+
+# PyTorch 2.2.2 + CUDA 11.8 (requerido para DeepSpeed 0.13.1)
+pip install torch==2.2.2+cu118 torchaudio==2.2.2+cu118 --index-url https://download.pytorch.org/whl/cu118
+
+# DeepSpeed 0.13.1 pre-compilado para Windows
+pip install https://github.com/daswer123/deepspeed-windows/releases/download/13.1/deepspeed-0.13.1+cu118-cp311-cp311-win_amd64.whl
+
+# Coqui TTS y RealtimeTTS (sin deps para evitar conflictos)
+pip install coqui-tts realtimetts --no-deps
+
+# Resto de dependencias
+pip install -r requirements_tts.txt
+cd ..
+```
+
+> **NOTA**: PyTorch 2.2.2+cu118 es compatible con DeepSpeed 0.13.1. El backend principal usa PyTorch 2.6+ (CUDA 12.4) sin conflictos gracias a la arquitectura de microservicios aislados.
 
 ### Frontend (Electron)
 ```powershell
@@ -74,19 +104,21 @@ cd ..
 
 ## 🎮 Uso
 
-### Modo Desktop Pet + Panel de Control (Recomendado)
+### Inicio Automatico (Recomendado)
 ```powershell
-.\venv\Scripts\python.exe run_electron.py
+.\start_yui.bat
 ```
 
-Esto inicia:
-- Desktop Pet (mascota Live2D en esquina)
-- Panel de Control (accesible desde bandeja del sistema)
-- Servidor WebSocket para comunicacion
+Este script inicia automáticamente:
+1. **Backend Principal** - LLM, STT, WebSocket (puerto 58765)
+2. **TTS Microservice** se inicia automáticamente cuando Yui habla (puerto 51001)
+3. **Desktop Pet** - Mascota Live2D con Electron
 
-1. **Espera** a que carguen los modelos (~2-3 min primera vez)
-2. **Habla** diciendo "Yui" seguido de tu mensaje
-3. **Yui responde** con voz clonada
+### Espera ~2-3 minutos la primera vez (carga de modelos)
+
+**Para interactuar:**
+1. Di "Yui" seguido de tu mensaje
+2. Yui responderá con voz clonada
 
 ## Interfaz
 
@@ -96,7 +128,7 @@ El sistema incluye:
   - Estado visual (activa, escuchando, procesando)
   - Transcripcion en vivo
   - Respuestas de Yui
-  - Botones de control (silenciar, reposo, configuracion)
+  - Botones de control (silenciar, reposo, rendimiento, configuracion)
   - Tecla de silencio personalizable
 - **Menu de bandeja**:
   - Expresiones y animaciones
@@ -104,6 +136,7 @@ El sistema incluye:
   - Ajustar subtitulos (posicion, tamano)
   - Arrastrar ventana
   - Modo atravesar (passthrough)
+  - Reiniciar aplicacion
 
 ## ⚡ Comandos de Voz
 
@@ -137,36 +170,48 @@ Soporta:
 ```
 yui-asistente/
 ├── backend/
-│   ├── yui_assistant.py    # Pipeline principal
-│   ├── whisper_stt.py      # Speech-to-Text
-│   ├── llama_llm.py        # LLM (Llama 3.2)
-│   ├── coqui_tts.py        # Text-to-Speech (XTTS v2)
-│   ├── commands.py         # Comandos de voz
-│   ├── web_search.py       # Busqueda web (Brave API)
-│   ├── memory_system.py    # Memoria selectiva (ChromaDB)
+│   ├── yui_assistant.py      # Pipeline principal
+│   ├── whisper_stt.py        # Speech-to-Text (faster-whisper)
+│   ├── llama_llm.py          # LLM local (Llama 3.2 3B)
+│   ├── groq_llm.py           # LLM nube (Groq API - modo rendimiento)
+│   ├── coqui_tts.py          # Cliente TTS (WebSocket + gestión proceso)
+│   ├── commands.py           # Comandos de voz (apps, hora, fecha)
+│   ├── web_search.py         # Búsqueda web (Brave API)
+│   ├── memory_system.py      # Memoria selectiva (ChromaDB)
+│   ├── reflection_system.py  # Sistema de reflexión
 │   ├── continuous_listener.py # Escucha continua con VAD
-│   ├── vad_listener.py     # Voice Activity Detection
-│   ├── state_machine.py    # Maquina de estados
-│   ├── reminders.py        # Sistema de recordatorios
-│   ├── gui_api.py          # API para la GUI
-│   ├── websocket_server.py # Servidor WebSocket
-│   ├── logger.py           # Sistema de logging dual
-│   └── audio_manager.py    # Grabacion/reproduccion
-├── desktop-pet/            # Aplicacion Electron
-│   ├── src/main.ts         # Proceso principal
+│   ├── vad_listener.py       # Voice Activity Detection (Silero)
+│   ├── wake_word.py          # Detector de wake word (OpenAI Whisper)
+│   ├── state_machine.py      # Máquina de estados
+│   ├── reminders.py          # Sistema de recordatorios
+│   ├── emotion_detector.py   # Detección de emociones (RoBERTuito)
+│   ├── special_events.py     # Eventos especiales (Navidad, cumple)
+│   ├── gui_api.py            # API para la GUI
+│   ├── websocket_server.py   # Servidor WebSocket (puerto 58765)
+│   ├── logger.py             # Sistema de logging dual
+│   ├── config.py             # Configuración centralizada
+│   └── audio_manager.py      # Grabación/reproducción
+├── tts-service/              # Microservicio TTS (aislado)
+│   ├── tts_server.py         # Servidor WebSocket TTS (puerto 51001)
+│   ├── requirements_tts.txt  # Dependencias TTS
+│   └── venv_tts/             # Entorno virtual aislado
+├── desktop-pet/              # Aplicación Electron
+│   ├── src/main.ts           # Proceso principal
 │   ├── src/control-panel.ts  # Panel de control
-│   ├── index.html          # Ventana Live2D
-│   ├── control-panel.html  # Panel de control
-│   └── models/             # Modelos Live2D
-├── voice_samples/          # Muestras de voz para clonacion
+│   ├── index.html            # Ventana Live2D
+│   ├── control-panel.html    # Panel de control
+│   └── models/               # Modelos VRM
+├── voice_samples/            # Muestras de voz para clonación
 ├── logs/
-│   ├── yui.log             # Log de conversaciones
-│   └── yui_debug.log       # Log de funcionamiento interno
-├── data/chromadb/          # Base de datos de memoria
-├── .env                    # Variables de entorno (API keys)
-├── config.json             # Configuracion
-├── run_electron.py         # Lanzador principal
-└── requirements.txt        # Dependencias Python
+│   ├── yui.log               # Log de conversaciones
+│   ├── yui_debug.log         # Log de funcionamiento interno
+│   └── tts_process.log       # Log del proceso TTS
+├── data/chromadb/            # Base de datos de memoria
+├── .env                      # Variables de entorno (API keys)
+├── config.json               # Configuración
+├── run_electron.py           # Lanzador principal
+├── start_yui.bat             # Script de inicio rápido
+└── requirements.txt          # Dependencias Python
 ```
 
 ## 🎨 Personalización de Voz
@@ -194,22 +239,27 @@ Edita `config.json` para ajustar:
 
 | Componente | Tecnología |
 |------------|------------|
-| STT | OpenAI Whisper (medium) |
-| LLM | Llama 3.2 3B (HuggingFace) |
-| TTS | Coqui XTTS v2 |
+| STT | faster-whisper (medium INT8) |
+| LLM Local | Llama 3.2 3B (4-bit) via bitsandbytes 0.49 |
+| LLM Nube | Groq API (Llama 90B) |
+| TTS | Coqui XTTS v2 + DeepSpeed (microservicio aislado) |
+| Emociones | pysentimiento/RoBERTuito |
 | VAD | Silero VAD |
+| Wake Word | OpenAI Whisper base (modo reposo) |
 | Búsqueda Web | Brave Search API |
 | Memoria | ChromaDB + Sentence Transformers |
 | Comandos | AppOpener |
-| Cuantización | bitsandbytes 4-bit |
-| GUI | Electron + Live2D |
+| Backend | PyTorch 2.6 + CUDA 12.4 + transformers 4.57 |
+| TTS Service | PyTorch 2.2.2 + DeepSpeed 0.13.1 (proceso separado) |
+| GUI | Electron + VRM (Live2D) |
 
 ## 📊 Rendimiento
 
 - **Tiempo de respuesta**: 10-20 segundos (incluye TTS)
 - **VRAM LLM**: ~2.5 GB
 - **VRAM XTTS**: ~1.5 GB
-- **VRAM Whisper medium**: ~1 GB
+- **VRAM faster-whisper medium (INT8)**: ~0.8 GB
+- **VRAM Emociones**: ~0.5 GB
 - **Carga inicial**: ~2-3 minutos
 
 ## 📝 Logs

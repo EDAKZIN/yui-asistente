@@ -19,7 +19,7 @@ class YuiWebSocketServer:
     Permite comunicación bidireccional con Electron
     """
     
-    def __init__(self, gui_api, host: str = 'localhost', port: int = 8765):
+    def __init__(self, gui_api, host: str = 'localhost', port: int = 58765):
         """
         Args:
             gui_api: Instancia de YuiGUIAPI
@@ -94,6 +94,11 @@ class YuiWebSocketServer:
                 # Notificar a todos los clientes
                 await self.broadcast({'type': 'sleep_changed', 'data': result})
             
+            elif action == 'toggle_performance':
+                result = self.gui_api.toggle_performance()
+                # Notificar a todos los clientes
+                await self.broadcast({'type': 'performance_changed', 'data': result})
+            
             elif action == 'set_mute_key':
                 key = params.get('key', 'F1')
                 result = self.gui_api.set_mute_key(key)
@@ -105,6 +110,39 @@ class YuiWebSocketServer:
             elif action == 'set_proactive_enabled':
                 enabled = params.get('enabled', True)
                 result = self.gui_api.set_proactive_enabled(enabled)
+            
+            elif action == 'shutdown':
+                # Reiniciar todo el sistema
+                logger.info("Comando de reinicio recibido - reiniciando Yui...")
+                result = {'status': 'restarting'}
+                await websocket.send(json.dumps({
+                    'type': 'response',
+                    'action': action,
+                    'data': result
+                }))
+                # Dar un momento para que el mensaje se envíe
+                import asyncio
+                await asyncio.sleep(0.3)
+                # Reiniciar: lanzar nuevo proceso y cerrar este
+                import sys
+                import os
+                import subprocess
+                # Obtener el path del script principal
+                script_path = os.path.abspath(sys.argv[0])
+                python = sys.executable
+                
+                # Limpiar recursos antes de reiniciar!
+                if self.gui_api:
+                    self.gui_api.cleanup()
+                
+                # Lanzar nuevo proceso (detached)
+                subprocess.Popen(
+                    [python, script_path],
+                    cwd=os.path.dirname(script_path),
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+                # Cerrar este proceso
+                os._exit(0)
             
             else:
                 result = {'error': f'Acción desconocida: {action}'}
@@ -190,6 +228,17 @@ class YuiWebSocketServer:
         if self._loop:
             asyncio.run_coroutine_threadsafe(
                 self.broadcast({'type': 'tts_complete', 'data': {'text': text}}),
+                self._loop
+            )
+    
+    def notify_expression(self, expression_name: str):
+        """Notifica al frontend que cambie la expresion del modelo Live2D"""
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self.broadcast({
+                    'type': 'set_expression',
+                    'data': {'name': expression_name}
+                }),
                 self._loop
             )
     

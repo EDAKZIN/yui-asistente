@@ -27,6 +27,7 @@ const state = {
     currentState: 'loading' as AppState,
     isMuted: false,
     isSleeping: false,
+    isPerformanceMode: false,
     muteKey: 'F1',
     wsConnected: false
 };
@@ -52,6 +53,7 @@ const elements = {
     responseContent: document.getElementById('responseContent')!,
     btnMute: document.getElementById('btnMute')!,
     btnSleep: document.getElementById('btnSleep')!,
+    btnPerformance: document.getElementById('btnPerformance')!,
     btnSettings: document.getElementById('btnSettings')!,
     btnCloseSettings: document.getElementById('btnCloseSettings')!,
     btnClearTranscript: document.getElementById('btnClearTranscript')!,
@@ -71,7 +73,7 @@ let reconnectInterval: number | null = null;
 // === WebSocket ===
 
 function connectWebSocket(): void {
-    const wsUrl = 'ws://localhost:8765';
+    const wsUrl = 'ws://localhost:58765';
     console.log('Conectando a WebSocket:', wsUrl);
 
     try {
@@ -199,6 +201,17 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
             }
             break;
 
+        case 'performance_changed':
+            if (message.data) {
+                state.isPerformanceMode = message.data.is_performance_mode;
+                elements.btnPerformance.classList.toggle('active', state.isPerformanceMode);
+                const label = elements.btnPerformance.querySelector('.btn-label');
+                if (label) {
+                    label.textContent = state.isPerformanceMode ? 'Rendimiento ✓' : 'Rendimiento';
+                }
+            }
+            break;
+
         case 'error':
             console.error('Error del servidor:', message.data?.message);
             break;
@@ -303,6 +316,11 @@ function setupEventListeners(): void {
     // Sleep button
     elements.btnSleep.addEventListener('click', () => {
         sendAction('toggle_sleep');
+    });
+
+    // Performance mode button
+    elements.btnPerformance.addEventListener('click', () => {
+        sendAction('toggle_performance');
     });
 
     // Settings modal

@@ -1,0 +1,54 @@
+# TTS Microservice - Yui AI Assistant
+# Version: 2.1.0
+# Actualizado: 2026-01-03
+#
+# Este entorno esta AISLADO del backend principal
+# Contiene PyTorch 2.2.2 + DeepSpeed 0.13.1 + Coqui TTS + RealtimeTTS
+
+# ==============================================================================
+# INSTALACION (Python 3.11 requerido)
+# ==============================================================================
+# 1. py -3.11 -m venv venv_tts
+# 2. .\venv_tts\Scripts\activate
+# 3. pip install torch==2.2.2+cu118 torchaudio==2.2.2+cu118 --index-url https://download.pytorch.org/whl/cu118
+# 4. pip install https://github.com/daswer123/deepspeed-windows/releases/download/13.1/deepspeed-0.13.1+cu118-cp311-cp311-win_amd64.whl
+# 5. pip install coqui-tts realtimetts --no-deps
+# 6. pip install -r requirements_tts.txt
+# ==============================================================================
+
+# Core (instalados en paso 5, no reinstalar)
+# coqui-tts>=0.27.0
+# realtimetts>=0.5.0
+
+# PyTorch dependencies
+numpy>=1.24.0,<2.0
+
+# TTS dependencies
+transformers>=4.50.0
+stream2sentence>=0.3.0
+coqui-tts-trainer>=0.3.0
+librosa>=0.10.0
+scipy>=1.10.0
+
+# Text processing
+anyascii>=0.3.0
+ko_speech_tools>=0.1.0
+bangla>=0.0.5
+bnnumerizer>=0.0.2
+bnunicodenormalizer>=0.1.0
+jieba>=0.42.0
+pypinyin>=0.52.0
+gruut[de,es,fr]>=2.2.0
+
+# Audio processing
+pydub>=0.25.0
+resampy==0.4.3
+PyAudio>=0.2.14
+sounddevice>=0.4.6
+soundfile>=0.12.0
+
+# Server WebSocket
+websockets>=12.0
+
+# Utils
+colorlog>=6.7.0

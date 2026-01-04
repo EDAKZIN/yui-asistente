@@ -419,6 +419,15 @@ body {
     border-color: var(--status-sleeping);
 }
 
+.btn-performance.active {
+    background: rgba(67, 181, 129, 0.2);
+    border-color: var(--status-active);
+}
+
+.btn-performance.active .control-icon {
+    fill: var(--status-active);
+}
+
 /* ============ MODAL ============ */
 .modal {
     display: none;

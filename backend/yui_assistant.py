@@ -20,6 +20,9 @@ from commands import command_executor
 import logging
 import re
 
+# Groq LLM para modo rendimiento (lazy load)
+groq_llm = None
+
 class YuiAssistant:
     """Asistente de voz Yui - Pipeline completo"""
     
@@ -80,6 +83,64 @@ class YuiAssistant:
         # Sistema de Memoria (ruta relativa)
         chromadb_path = self.project_root / self.config['paths']['chromadb_path']
         self.memory = MemorySystem(db_path=str(chromadb_path))
+        
+        # Modo rendimiento (usa Groq en vez de Llama local)
+        self.performance_mode = False
+        self.groq = None  # Lazy load
+        
+        # Sistema de reflexión (lazy load después de memoria)
+        self.reflection = None
+    
+    def enable_performance_mode(self) -> str:
+        """Activa el modo rendimiento (Groq API en vez de Llama local)"""
+        global groq_llm
+        
+        if self.performance_mode:
+            return "Ya estoy en modo rendimiento."
+        
+        try:
+            from groq_llm import GroqLLM
+            self.groq = GroqLLM()
+            if self.groq.load():
+                # Descargar Llama de VRAM
+                self.logger.info("Activando modo rendimiento: descargando Llama local...")
+                self.llama.unload_model()
+                self.performance_mode = True
+                self.logger.info("Modo rendimiento activado (usando Groq)")
+                return "Modo rendimiento activado. Ahora uso Groq para responder más rápido."
+            else:
+                return "No pude activar el modo rendimiento. Revisa la API key de Groq."
+        except Exception as e:
+            self.logger.error(f"Error activando modo rendimiento: {e}")
+            return f"Error: {str(e)[:50]}"
+    
+    def disable_performance_mode(self) -> str:
+        """Desactiva el modo rendimiento (vuelve a Llama local)"""
+        if not self.performance_mode:
+            return "Ya estoy en modo local."
+        
+        try:
+            # Recargar Llama
+            self.logger.info("Desactivando modo rendimiento: recargando Llama local...")
+            self.llama.load_model()
+            self.performance_mode = False
+            
+            # Liberar Groq
+            if self.groq:
+                self.groq.unload()
+                self.groq = None
+            
+            self.logger.info("Modo local activado (usando Llama)")
+            return "Modo local activado. Vuelvo a usar mi cerebro local."
+        except Exception as e:
+            self.logger.error(f"Error desactivando modo rendimiento: {e}")
+            return f"Error: {str(e)[:50]}"
+    
+    def get_current_llm(self):
+        """Retorna el LLM activo (Groq o Llama)"""
+        if self.performance_mode and self.groq:
+            return self.groq
+        return self.llama
     
     def load_models(self):
         """Carga todos los modelos en memoria"""
@@ -102,6 +163,16 @@ class YuiAssistant:
         # Cargar sistema de memoria
         print("  [4/4] Cargando sistema de memoria...")
         self.memory.load()
+        
+        # Inicializar sistema de reflexión (después de memoria)
+        try:
+            from reflection_system import ReflectionSystem
+            self.reflection = ReflectionSystem(self.memory, self.llama)
+            self.reflection.load()
+            self.logger.info("Sistema de reflexión inicializado")
+        except Exception as e:
+            self.logger.error(f"Error inicializando reflexión: {e}")
+            self.reflection = None
         
         print(" Todos los modelos cargados\n")
     
@@ -191,6 +262,16 @@ class YuiAssistant:
                 self._pending_app_confirmation = pending_app  # Restaurar
                 return f"No entendí, ¿querías abrir {pending_app}? Dime sí o no."
         
+        # Detectar comandos de modo rendimiento
+        if any(phrase in text_lower for phrase in ['modo rendimiento', 'modo de rendimiento', 'modo rápido', 'modo rapido', 'modo turbo', 'activa groq', 'usa groq']):
+            self.logger.info("Comando detectado: activar modo rendimiento")
+            return self.enable_performance_mode()
+        
+        # Detectar comandos de modo local
+        if any(phrase in text_lower for phrase in ['modo local', 'modo normal', 'modo lento']):
+            self.logger.info("Comando detectado: desactivar modo rendimiento")
+            return self.disable_performance_mode()
+        
         # Detectar comando "abre X" / "abrir X"
         open_patterns = [
             r'(?:abre|abrir|abrí|abreme|abrirme|ejecuta|ejecutar|inicia|iniciar)\s+(.+)',
@@ -226,7 +307,10 @@ class YuiAssistant:
         
         # Detectar búsqueda web: "busca X", "qué es X", "quién es X"
         search_patterns = [
-            r'(?:busca|búscame|investiga|dime sobre|háblame de|información sobre)\s+(.+)',
+            # Variantes de "busca/buscar/busques" (incluye "que busques", "necesito que busques", etc.)
+            r'(?:busca|buscas|buscar|busques|búscame|búscar|investiga|investigues)\s+(.+)',
+            r'(?:que|necesito que|puedes|podrías)\s+(?:busques|buscar|investigues)\s+(.+)',
+            r'(?:dime sobre|háblame de|cuéntame sobre|información sobre)\s+(.+)',
             r'(?:qué|que) (?:es|son|significa|significa)\s+(.+)',
             r'(?:quién|quien) (?:es|fue|era)\s+(.+)',
         ]
@@ -240,16 +324,67 @@ class YuiAssistant:
                 
                 if success:
                     # Pasar resultados al LLM para una respuesta natural
-                    # Incluir fecha actual para contexto temporal
                     from datetime import datetime
                     fecha_actual = datetime.now().strftime("%d de %B de %Y")
-                    prompt_with_context = f"Fecha actual: {fecha_actual}. Basandote en esta informacion de internet: {search_results}\n\nResponde brevemente a: {transcript}"
-                    return self.llama.generate_response(prompt_with_context, use_history=False)
+                    
+                    # Prompt simple y directo - el contexto viene del historial
+                    prompt_with_context = f"""[BÚSQUEDA WEB - {fecha_actual}]
+Resultados encontrados:
+{search_results}
+
+Responde brevemente usando esta información."""
+                    
+                    return self.get_current_llm().generate_response(prompt_with_context, use_history=True)
                 else:
                     return search_results
         
-        # No es un comando - usar LLM para conversación normal
-        return self.llama.generate_response(transcript)
+        # Detectar comandos de VISION: "mira la pantalla", "qué ves", "describe la pantalla"
+        vision_patterns = [
+            r'(?:mira|ve|observa|describe|analiza|revisa)\s+(?:la\s+)?pantalla',
+            r'(?:qué|que)\s+(?:ves|puedes\s+ver|hay\s+en\s+pantalla)',
+            r'(?:dime|describe)\s+(?:qué|que)\s+(?:ves|hay)',
+            r'(?:qué|que)\s+(?:tengo|hay)\s+(?:en\s+)?(?:la\s+)?pantalla',
+            r'(?:lee|leer)\s+(?:la\s+)?pantalla',
+            r'mira\s+(?:mi\s+)?pantalla',  # "mira mi pantalla", "mira pantalla"
+        ]
+        
+        for pattern in vision_patterns:
+            if re.search(pattern, text_lower):
+                self.logger.info("Comando detectado: vision (Florence-2)")
+                
+                # Detectar si es OCR o descripcion general
+                if 'lee' in text_lower or 'leer' in text_lower or 'texto' in text_lower:
+                    success, result = command_executor.read_screen_text()
+                    if success:
+                        # Pasar OCR al LLM para respuesta natural EN ESPAÑOL
+                        prompt_with_vision = f"[Texto detectado en pantalla (en ingles)]: {result}\n\nTraduce y resume brevemente en español lo que leiste."
+                        return self.get_current_llm().generate_response(prompt_with_vision, use_history=False)
+                    return result
+                else:
+                    success, description = command_executor.describe_screen()
+                    if success:
+                        # Usar contexto inteligente (sesión + largo plazo filtrado)
+                        smart_context = ""
+                        try:
+                            smart_context = self.memory.get_smart_context(description, min_relevance=0.6)
+                        except:
+                            pass
+                        
+                        # Prompt con contexto filtrado
+                        prompt_with_vision = f"""[Lo que ves en la pantalla]: {description}
+{smart_context}
+
+Haz UN comentario breve y natural como Yui sobre lo que el usuario está haciendo.
+- Si reconoces algo (juego, programa, video): comenta al respecto
+- Si no estás segura: pregunta con curiosidad ("¿eso es X?")
+- Nunca describas literalmente cada elemento
+- NO uses *expresiones* (como *sonríe*), las expresiones son automáticas
+- Respuesta en español, 1-2 oraciones máximo."""
+                        return self.get_current_llm().generate_response(prompt_with_vision, use_history=False)
+                    return description
+        
+        # Conversación normal - usar LLM
+        return self.get_current_llm().generate_response(transcript)
     
     def run_interactive(self):
         """Modo interactivo continuo"""
@@ -304,6 +439,9 @@ class YuiAssistant:
                 max_proactive=listen_config.get('max_proactive_comments', 3)
             )
             
+            # Conectar command_executor para visión proactiva
+            listener.command_executor = command_executor
+            
             # Ejecutar en modo bloqueante
             listener.run_blocking()
             
@@ -339,12 +477,10 @@ class YuiAssistant:
         response = self.llama.generate_response(test_input)
         print(f"  Respuesta: '{response}'")
         
-        # Probar Piper + RVC
-        print("\n[4/4] Probando Piper TTS + RVC...")
-        tts_audio, tts_sr = self.piper.synthesize(response)
-        final_audio, final_sr = self.rvc.convert_voice(tts_audio, tts_sr)
-        print("  Reproduciendo audio...")
-        self.audio_manager.play(final_audio, final_sr)
+        # Probar TTS (Coqui XTTS)
+        print("\n[4/4] Probando Coqui TTS...")
+        print("  Sintetizando respuesta...")
+        self.tts.synthesize(response)
         
         print("\n Prueba de componentes completada")
         print("=" * 70)

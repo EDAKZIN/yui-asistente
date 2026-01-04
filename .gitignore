@@ -1,89 +1,71 @@
+# =============================================================================
+# Yui AI Assistant - .gitignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
 # Python
+# -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 
-# Virtual Environment
+# -----------------------------------------------------------------------------
+# Entornos Virtuales
+# -----------------------------------------------------------------------------
 venv/
-ENV/
-env/
-.venv/
+tts-service/venv_tts/
 
-# IDE
+# -----------------------------------------------------------------------------
+# IDE / Editor
+# -----------------------------------------------------------------------------
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# Logs
+# -----------------------------------------------------------------------------
+# Logs (se generan en cada ejecucion)
+# -----------------------------------------------------------------------------
 logs/*.log
-*.log
 
-# Data (ChromaDB persistence)
+# -----------------------------------------------------------------------------
+# Base de datos local (ChromaDB - memoria de Yui)
+# -----------------------------------------------------------------------------
 data/chromadb/
 
-# Modelos descargados (se descargan automáticamente)
-models/*.pth
-models/*.bin
-*.onnx
+# -----------------------------------------------------------------------------
+# Modelos XTTS (se descargan automaticamente, ~1.8GB)
+# -----------------------------------------------------------------------------
+models/v2.0.2/
 
-# Audio temporal
-*.wav
-*.mp3
-*.ogg
-*.flac
-!voice_samples/*.wav
-!voice_samples/*.ogg
-!voice_samples/*.mp3
-
-# Cache de HuggingFace/Torch
-.cache/
-*.cache
-
-# Configuración local
+# -----------------------------------------------------------------------------
+# Configuracion local (contiene API keys)
+# -----------------------------------------------------------------------------
 .env
-*.local
 
+# -----------------------------------------------------------------------------
 # OS
+# -----------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Jupyter
-.ipynb_checkpoints/
+# -----------------------------------------------------------------------------
+# Node.js / Electron (desktop-pet)
+# -----------------------------------------------------------------------------
+desktop-pet/node_modules/
 
-# Node.js / Electron
-node_modules/
-package-lock.json
-
-# TypeScript compilado
-desktop-pet/dist/
-
-# Electron build output
+# Builds de Electron (se generan con electron-builder)
 desktop-pet/out/
 desktop-pet/release/
-*.exe
-*.dmg
-*.AppImage
 
-# Modelos Live2D (copyright)
+# TypeScript compilado (se genera con tsc)
+desktop-pet/dist/
+
+# -----------------------------------------------------------------------------
+# Modelos Live2D/VRM (copyright, no incluir en repo)
+# -----------------------------------------------------------------------------
 desktop-pet/models/*
 !desktop-pet/models/README.md
