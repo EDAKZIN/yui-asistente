@@ -1,5 +1,5 @@
 {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "paths": {
         "llama_model": "unsloth/Llama-3.2-3B-Instruct",
         "chromadb_path": "data/chromadb",
@@ -9,8 +9,7 @@
     "models": {
         "whisper": {
             "model_size": "medium",
-            "language": "es",
-            "compute_type": "float16"
+            "language": "es"
         },
         "llama": {
             "max_length": 512,
@@ -21,23 +20,13 @@
     },
     "audio": {
         "sample_rate": 16000,
-        "channels": 1,
-        "chunk_duration_ms": 30
-    },
-    "ui": {
-        "theme": "dark",
-        "show_transcripts": true
+        "channels": 1
     },
     "listening": {
-        "mode": "continuous",
         "inactivity_timeout_seconds": 120,
         "proactive_comments_enabled": true,
         "max_proactive_comments": 3,
-        "vad_threshold": 0.65,
-        "min_speech_duration": 0.5,
-        "min_silence_duration": 0.8,
-        "wake_word": "hey_jarvis",
-        "wake_word_threshold": 0.5
+        "vad_threshold": 0.65
     },
     "gui": {
         "mute_key": "|"
