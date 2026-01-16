@@ -12,6 +12,15 @@ from typing import Callable, Optional
 import sounddevice as sd
 from pathlib import Path
 
+# Decorador para tracking de memoria (opcional)
+try:
+    from diagnostics.decorators import track_memory
+except ImportError:
+    def track_memory(name=None):
+        def decorator(func):
+            return func
+        return decorator
+
 logger = logging.getLogger('Yui.WakeWord')
 
 
@@ -326,6 +335,7 @@ class WhisperWakeWordDetector:
         
         logger.info(f"WhisperWakeWordDetector inicializado (name='{name}', chunk={chunk_duration}s)")
     
+    @track_memory("WakeWord.load_model")
     def load_model(self):
         """Carga Whisper base (OpenAI) para deteccion de wake word"""
         if self.model is not None:
@@ -345,6 +355,7 @@ class WhisperWakeWordDetector:
             logger.error(f"Error cargando OpenAI Whisper base: {e}")
             raise
     
+    @track_memory("WakeWord.unload_model")
     def unload_model(self):
         """Descarga el modelo de forma segura (OpenAI Whisper soporta esto)"""
         if self.model is None:

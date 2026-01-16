@@ -16,6 +16,13 @@ import time
 from typing import Callable, Optional
 from pathlib import Path
 
+# Funcion para registrar eventos de memoria (opcional)
+try:
+    from diagnostics.decorators import log_memory_event
+except ImportError:
+    def log_memory_event(event: str):
+        pass  # No-op si diagnostics no esta disponible
+
 logger = logging.getLogger('Yui.Coqui')
 
 # Puerto del servidor TTS (51001 = puerto poco comun)
@@ -233,12 +240,32 @@ class CoquiTTS:
         finally:
             await ws.close()
     
+    async def _send_stop_command(self):
+        """Envía comando de stop al servidor TTS para interrumpir síntesis actual"""
+        try:
+            import websockets
+            ws = await asyncio.wait_for(
+                websockets.connect(TTS_SERVICE_URL),
+                timeout=2.0
+            )
+            await ws.send(json.dumps({'action': 'stop'}))
+            self._is_playing = False
+            await ws.close()
+            logger.info("  Síntesis anterior interrumpida")
+        except Exception as e:
+            logger.warning(f"Error enviando stop: {e}")
+    
     # ==================== SÍNTESIS ====================
     
     async def _synthesize_async(self, text: str, language: str = "es"):
         """Versión async de synthesize"""
         if not text:
             return
+        
+        # Si ya está hablando, interrumpir síntesis actual
+        if self._is_playing:
+            logger.info("Interrumpiendo síntesis actual para nueva...")
+            await self._send_stop_command()
         
         log_text = text[:50] + "..." if len(text) > 50 else text
         logger.info(f" Sintetizando (streaming): '{log_text}'")
@@ -348,6 +375,7 @@ class CoquiTTS:
             True si el modelo se cargó correctamente
         """
         logger.info("Cargando modelo TTS (iniciando proceso)...")
+        log_memory_event("CoquiTTS.load_model:START")
         
         # Iniciar proceso si no está corriendo
         if not self._start_tts_process():
@@ -363,6 +391,7 @@ class CoquiTTS:
             response = await self._send_message({'action': 'load'})
             if response and response.get('status') == 'loaded':
                 logger.info(" Modelo TTS cargado correctamente")
+                log_memory_event("CoquiTTS.load_model:END")
                 return True
             else:
                 logger.error(" Error cargando modelo TTS")
@@ -388,6 +417,7 @@ class CoquiTTS:
         result = self._stop_tts_process()
         if result:
             logger.info(" Proceso TTS detenido - VRAM liberada")
+            log_memory_event("CoquiTTS.unload_model:END")
         return result
     
     def shutdown(self):

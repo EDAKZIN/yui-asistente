@@ -5,7 +5,7 @@
 ## Caracteristicas
 
 - **STT (Speech-to-Text)**: faster-whisper "medium" con INT8 (optimizado)
-- **LLM**: Llama 3.2 3B con cuantizacion 4-bit (~2.5GB VRAM)
+- **LLM**: Llama 3.2 3B **Abliterated** GGUF (~2.7GB VRAM, sin censura)
 - **TTS con clonacion de voz**: Coqui XTTS v2
 - **Memoria selectiva**: ChromaDB con filtrado inteligente
 - **Comandos de voz**: Abrir apps, hora, fecha, busqueda web
@@ -33,7 +33,7 @@ Usuario → faster-whisper → Comandos/LLM → Emociones → XTTS v2 → Audio
 - Python 3.11+
 - Node.js 18+ (para Electron)
 - NVIDIA GPU con CUDA (RTX 3060 o superior recomendado)
-- ~7GB VRAM total durante ejecucion (optimizado con INT8)
+- ~10GB VRAM peak durante uso activo (optimizado con GGUF Q5_K_M)
 - Windows 10/11
 
 ## 🔧 Instalacion
@@ -172,7 +172,7 @@ yui-asistente/
 ├── backend/
 │   ├── yui_assistant.py      # Pipeline principal
 │   ├── whisper_stt.py        # Speech-to-Text (faster-whisper)
-│   ├── llama_llm.py          # LLM local (Llama 3.2 3B)
+│   ├── llama_llm.py          # LLM local (llama-cpp-python GGUF)
 │   ├── groq_llm.py           # LLM nube (Groq API - modo rendimiento)
 │   ├── coqui_tts.py          # Cliente TTS (WebSocket + gestión proceso)
 │   ├── commands.py           # Comandos de voz (apps, hora, fecha)
@@ -240,7 +240,7 @@ Edita `config.json` para ajustar:
 | Componente | Tecnología |
 |------------|------------|
 | STT | faster-whisper (medium INT8) |
-| LLM Local | Llama 3.2 3B (4-bit) via bitsandbytes 0.49 |
+| LLM Local | Llama 3.2 3B **Abliterated** GGUF Q5_K_M via llama-cpp-python |
 | LLM Nube | Groq API (Llama 90B) |
 | TTS | Coqui XTTS v2 + DeepSpeed (microservicio aislado) |
 | Emociones | pysentimiento/RoBERTuito |
@@ -249,17 +249,18 @@ Edita `config.json` para ajustar:
 | Búsqueda Web | Brave Search API |
 | Memoria | ChromaDB + Sentence Transformers |
 | Comandos | AppOpener |
-| Backend | PyTorch 2.6 + CUDA 12.4 + transformers 4.57 |
+| Backend | PyTorch 2.6 + CUDA 12.4 + llama-cpp-python (CUDA 12.1) |
 | TTS Service | PyTorch 2.2.2 + DeepSpeed 0.13.1 (proceso separado) |
-| GUI | Electron + VRM (Live2D) |
+| GUI | Electron + Live2D (pixi-live2d-display) |
 
 ## 📊 Rendimiento
 
 - **Tiempo de respuesta**: 10-20 segundos (incluye TTS)
-- **VRAM LLM**: ~2.5 GB
-- **VRAM XTTS**: ~1.5 GB
-- **VRAM faster-whisper medium (INT8)**: ~0.8 GB
+- **VRAM LLM**: ~2.7 GB (carga) + KV Cache dinámico
+- **VRAM XTTS**: ~3.5 GB (con DeepSpeed)
+- **VRAM faster-whisper medium (INT8)**: ~1 GB
 - **VRAM Emociones**: ~0.5 GB
+- **VRAM Peak total**: ~9-10 GB
 - **Carga inicial**: ~2-3 minutos
 
 ## 📝 Logs
@@ -278,3 +279,6 @@ Apps bloqueadas por seguridad: cmd, powershell, regedit, taskmgr, diskpart, y m�
 ## 📄 Licencia
 
 MIT License - Creado por **EDAKZIN** 🚀
+
+---
+**Versión 6.2.0** - Última actualización: 2026-01-16

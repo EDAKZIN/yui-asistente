@@ -6,6 +6,15 @@ Usa transformers con pysentimiento para detectar emociones en español
 import logging
 from typing import Optional
 
+# Decorador para tracking de memoria (opcional)
+try:
+    from diagnostics.decorators import track_memory
+except ImportError:
+    def track_memory(name=None):
+        def decorator(func):
+            return func
+        return decorator
+
 logger = logging.getLogger('Yui.Emotion')
 
 
@@ -29,6 +38,7 @@ class EmotionDetector:
         self._loaded = False
         logger.info("EmotionDetector inicializado (carga lazy)")
     
+    @track_memory("EmotionDetector.load")
     def load(self):
         """Carga el modelo de emociones"""
         if self._loaded:
@@ -38,7 +48,7 @@ class EmotionDetector:
             from transformers import pipeline
             import torch
             
-            device = 0 if torch.cuda.is_available() else -1
+            device = -1  # Forzar CPU para ahorrar VRAM (~450 MB)
             logger.info("Cargando modelo de emociones (pysentimiento/robertuito)...")
             
             self.classifier = pipeline(

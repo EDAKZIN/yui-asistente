@@ -11,6 +11,15 @@ from typing import List, Dict
 from datetime import datetime
 import os
 
+# Decorador para tracking de memoria (opcional)
+try:
+    from diagnostics.decorators import track_memory
+except ImportError:
+    def track_memory(name=None):
+        def decorator(func):
+            return func
+        return decorator
+
 logger = logging.getLogger('Yui.Memory')
 
 class MemorySystem:
@@ -38,6 +47,7 @@ class MemorySystem:
         logger.info(f"  DB: {db_path}")
         logger.info(f"  Historial de sesión: máx {max_session_history} mensajes")
     
+    @track_memory("MemorySystem.load")
     def load(self):
         """Carga el sistema de memoria"""
         if self.client is not None:
@@ -70,7 +80,7 @@ class MemorySystem:
             
             # Cargar modelo de embeddings (pequeño y rápido)
             logger.info("  Cargando modelo de embeddings...")
-            self.embedder = SentenceTransformer('all-MiniLM-L6-v2')  # ~80MB, rápido
+            self.embedder = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')  # CPU para ahorrar VRAM (~100 MB)
             
             logger.info(" Sistema de memoria listo")
             logger.info(f"  Conversaciones almacenadas: {self.collection.count()}")

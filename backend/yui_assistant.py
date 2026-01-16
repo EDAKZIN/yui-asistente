@@ -146,6 +146,20 @@ class YuiAssistant:
         """Carga todos los modelos en memoria"""
         self.logger.info("Cargando modelos...")
         
+        # Iniciar monitor de memoria para detectar fugas
+        try:
+            from diagnostics.memory_monitor import get_monitor
+            self._memory_monitor = get_monitor()
+            self._memory_monitor.set_baseline()
+            self._memory_monitor.start_periodic_logging()
+            self.logger.info("Monitor de memoria iniciado")
+        except ImportError:
+            self._memory_monitor = None
+            self.logger.debug("Monitor de memoria no disponible")
+        except Exception as e:
+            self._memory_monitor = None
+            self.logger.warning(f"Error iniciando monitor de memoria: {e}")
+        
         print("\n Cargando modelos (esto puede tardar 1-2 minutos)...")
         
         # Cargar Whisper
@@ -173,6 +187,10 @@ class YuiAssistant:
         except Exception as e:
             self.logger.error(f"Error inicializando reflexión: {e}")
             self.reflection = None
+        
+        # Registrar estado final de carga
+        if self._memory_monitor:
+            self._memory_monitor.log_event("ALL_MODELS_LOADED")
         
         print(" Todos los modelos cargados\n")
     
@@ -319,6 +337,14 @@ class YuiAssistant:
             match = re.search(pattern, text_lower)
             if match:
                 query = match.group(1).strip().rstrip('.,!?')
+                
+                # Excluir preguntas sobre Yui, su creador, o el usuario
+                # Estas se responden del conocimiento del prompt, no buscar
+                exclusion_keywords = ['yui', 'creador', 'creado', 'creaste', 'creó', 'edakzin', 'tú', 'tu']
+                if any(kw in query.lower() for kw in exclusion_keywords):
+                    self.logger.info(f"Pregunta sobre Yui/creador, no buscar: '{query}'")
+                    break  # Salir del loop, dejar que el LLM responda
+                
                 self.logger.info(f"Comando detectado: buscar '{query}'")
                 success, search_results = command_executor.web_search(query)
                 

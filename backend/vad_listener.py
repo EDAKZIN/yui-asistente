@@ -12,6 +12,15 @@ import queue
 from typing import Callable, Optional
 import sounddevice as sd
 
+# Decorador para tracking de memoria (opcional)
+try:
+    from diagnostics.decorators import track_memory
+except ImportError:
+    def track_memory(name=None):
+        def decorator(func):
+            return func
+        return decorator
+
 logger = logging.getLogger('Yui.VAD')
 
 
@@ -65,6 +74,7 @@ class VADListener:
         
         logger.info(f"VADListener inicializado (threshold={threshold}, sample_rate={sample_rate}Hz)")
     
+    @track_memory("VAD.load_model")
     def load_model(self):
         """Carga el modelo Silero VAD"""
         if self.model is not None:
@@ -95,6 +105,7 @@ class VADListener:
             logger.error(f"Error cargando Silero VAD: {e}")
             raise
     
+    @track_memory("VAD.unload_model")
     def unload_model(self):
         """Descarga el modelo para liberar memoria"""
         if self.model is not None:

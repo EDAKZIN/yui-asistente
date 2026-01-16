@@ -132,7 +132,7 @@ class ReminderSystem:
         reminder_keywords = [
             r'recuérdame', r'recuerdame', r'recordarme', 
             r'avísame', r'avisame',
-            r'recordatorio', r'hazme\s+un\s+recordatorio',
+            r'hazme\s+un\s+recordatorio',
             r'pon\s+un\s+recordatorio', r'ponme\s+un\s+recordatorio',
             r'alarma', r'pon\s+una?\s+alarma', r'ponme\s+una?\s+alarma',
             r'timer', r'temporizador', r'pon\s+un\s+timer'
@@ -141,6 +141,20 @@ class ReminderSystem:
         
         if not is_reminder:
             logger.debug(f"parse_reminder: no es recordatorio")
+            return None
+        
+        # Filtrar preguntas (no son comandos de crear recordatorio)
+        question_patterns = [
+            r'^\s*¿',                          # Empieza con ¿
+            r'\btengo\s+(algún|algun|alguno)\b',  # "tengo algún recordatorio"
+            r'\bcuáles?\b',                    # "cuáles recordatorios"
+            r'\bqué\s+recordatorio',           # "qué recordatorios tengo"
+            r'\bhay\s+recordatorio',           # "hay recordatorios pendientes"
+            r'\blistar?\b',                    # "lista recordatorios"
+            r'\bver\s+(mis|los)\s+recordatorio', # "ver mis recordatorios"
+        ]
+        if any(re.search(p, text_clean) for p in question_patterns):
+            logger.debug("parse_reminder: descartado (es pregunta sobre recordatorios)")
             return None
         
         logger.debug(f"parse_reminder: ES recordatorio, extrayendo tiempo...")

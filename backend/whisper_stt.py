@@ -8,6 +8,15 @@ import numpy as np
 import logging
 import re
 
+# Decorador para tracking de memoria (opcional)
+try:
+    from diagnostics.decorators import track_memory
+except ImportError:
+    def track_memory(name=None):
+        def decorator(func):
+            return func
+        return decorator
+
 logger = logging.getLogger('Yui.Whisper')
 
 
@@ -34,6 +43,7 @@ class WhisperSTT:
         logger.info(f"Inicializando faster-whisper STT (modelo: {model_size}, idioma: {language})")
         logger.info(f"  Compute type: {self.compute_type} (optimizado para menor VRAM)")
     
+    @track_memory("WhisperSTT.load_model")
     def load_model(self):
         """Carga el modelo faster-whisper en memoria"""
         if self.model is not None:
@@ -57,6 +67,7 @@ class WhisperSTT:
             logger.error(f" Error al cargar faster-whisper: {e}")
             raise
     
+    @track_memory("WhisperSTT.unload_model")
     def unload_model(self):
         """Descarga el modelo de VRAM para liberar memoria"""
         if self.model is not None:

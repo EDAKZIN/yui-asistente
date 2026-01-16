@@ -16,6 +16,7 @@ from wake_word import WhisperWakeWordDetector, SimpleNameDetector
 from reminders import ReminderSystem
 from emotion_detector import EmotionDetector
 from special_events import SpecialEventsSystem
+from session_context import SessionContext
 
 logger = logging.getLogger('Yui.Continuous')
 
@@ -113,6 +114,11 @@ class ContinuousListener:
         # Referencia al GUI API (para enviar actualizaciones al frontend)
         self.gui_api = None
         
+        # Contexto de sesión con archivo .md
+        from pathlib import Path
+        logs_dir = Path(__file__).parent.parent / "logs"
+        self.session_context = SessionContext(logs_dir=str(logs_dir))
+        
         logger.info("ContinuousListener inicializado")
     
     def set_gui_api(self, gui_api):
@@ -166,6 +172,9 @@ class ContinuousListener:
     def _on_sleep(self):
         """Callback al entrar en modo reposo"""
         logger.info("Entrando en modo REPOSO - liberando recursos...")
+        
+        # Limpiar contexto de sesión
+        self.session_context.clear()
         
         # Log VRAM inicial
         try:
@@ -363,6 +372,23 @@ class ContinuousListener:
         """Callback cuando un recordatorio se activa"""
         logger.info(f"Recordatorio activado: {reminder.message}")
         
+        # Esperar a que el sistema esté libre (no procesando, no hablando TTS)
+        max_wait = 30  # Máximo 30 segundos de espera
+        waited = 0
+        while waited < max_wait:
+            is_busy = (
+                self.state_machine.state != YuiState.ACTIVE or
+                (hasattr(self.yui, 'tts') and self.yui.tts._is_playing)
+            )
+            if not is_busy:
+                break
+            logger.debug(f"Sistema ocupado, esperando para recordatorio... ({waited}s)")
+            time.sleep(1)
+            waited += 1
+        
+        if waited >= max_wait:
+            logger.warning("Timeout esperando sistema libre, lanzando recordatorio de todas formas")
+        
         # Generar respuesta natural usando el LLM si está disponible
         try:
             if hasattr(self.yui.llama, 'model') and self.yui.llama.model:
@@ -528,6 +554,9 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
             
             # 7. Guardar en memoria de CORTO PLAZO (sesión) para continuidad
             self.yui.memory.add_to_session(transcript, response)
+            
+            # 7.5 Actualizar contexto de sesión (.md file)
+            self.session_context.add_exchange(transcript, response)
             
             # 8. Guardar en memoria de LARGO PLAZO (ChromaDB) si es relevante
             self.yui.memory.add_conversation(transcript, response)
@@ -737,20 +766,24 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
                     except:
                         pass
                     
-                    # Generar comentario dinámico usando LLM
-                    prompt = f"""Eres Yui. El usuario no te ha hablado en un rato.
-{f"[Recuerdos recientes]: {memory_context}" if memory_context else ""}
-
-Genera UN comentario breve y natural (1 oración) que refleje tu personalidad:
-- Puedes estar aburrida, curiosa, juguetona, o reflexiva
-- Si tienes recuerdos interesantes, menciona algo relacionado
-- Si no, simplemente comenta sobre estar esperando o pregunta algo casual
-- NO uses frases genéricas como "¿en qué te ayudo?"
-- NO uses *expresiones* (como *sonríe*), son automáticas
-- Sé natural y única cada vez."""
-
+                    # Generar comentario dinámico usando LLM con Ghost Prompting
+                    # Esto mantiene la personalidad completa de Yui sin contaminar historial
                     try:
-                        comment = self.yui.get_current_llm().generate_response(prompt, use_history=False)
+                        llm = self.yui.get_current_llm()
+                        
+                        # Verificar si es LLM local (tiene generate_proactive)
+                        if hasattr(llm, 'generate_proactive'):
+                            comment = llm.generate_proactive(
+                                task_instruction="Genera un comentario casual para llamar la atención del usuario",
+                                memory_context=memory_context
+                            )
+                        else:
+                            # Fallback para Groq u otros LLMs
+                            prompt = f"""Eres Yui. El usuario no te ha hablado en un rato.
+{f"[Recuerdos]: {memory_context}" if memory_context else ""}
+Genera UN comentario corto (máximo 10 palabras) casual."""
+                            comment = llm.generate_response(prompt, use_history=False)
+                        
                         if comment:
                             self.state_machine.proactive_comment_count += 1
                             print(f"\nYui: {comment}")
@@ -785,6 +818,9 @@ Genera UN comentario breve y natural (1 oración) que refleje tu personalidad:
         # Configurar estado inicial
         self.state_machine.transition_to(YuiState.ACTIVE)
         self._stop_event.clear()
+        
+        # Iniciar contexto de sesión
+        self.session_context.start_session()
         
         # Iniciar VAD
         self.vad.start()
