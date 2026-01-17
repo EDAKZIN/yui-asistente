@@ -186,6 +186,9 @@ function createTray(): void {
 
     tray.setToolTip('Yui Desktop Pet');
 
+    // Cargar config para estado inicial de accesorios
+    const config = loadConfig();
+
     const contextMenu = Menu.buildFromTemplate([
         {
             label: 'Mostrar/Ocultar Pet',
@@ -208,24 +211,49 @@ function createTray(): void {
             label: 'Expresiones',
             submenu: [
                 { label: 'Normal', click: () => mainWindow?.webContents.send('expression', 'neutral') },
-                { label: 'Enojada', click: () => mainWindow?.webContents.send('expression', 'angry') },
-                { label: 'Llorando', click: () => mainWindow?.webContents.send('expression', 'cry') },
-                { label: 'Sorprendida', click: () => mainWindow?.webContents.send('expression', 'baozhen') },
-                { label: 'Feliz 1', click: () => mainWindow?.webContents.send('expression', 'qizi1') },
-                { label: 'Feliz 2', click: () => mainWindow?.webContents.send('expression', 'qizi2') },
-                { label: 'Ojos Blancos', click: () => mainWindow?.webContents.send('expression', 'white eyes') }
+                { label: 'Feliz', click: () => mainWindow?.webContents.send('expression', 'excited') },
+                { label: 'Triste', click: () => mainWindow?.webContents.send('expression', 'sad') },
+                { label: 'Enojada', click: () => mainWindow?.webContents.send('expression', 'yanderee') },
+                { label: 'Sonrojada', click: () => mainWindow?.webContents.send('expression', 'blush') },
+                { label: 'Ojos Negros', click: () => mainWindow?.webContents.send('expression', 'blackiris') },
+                { label: 'Cara Rara', click: () => mainWindow?.webContents.send('expression', 'weirdface') }
+            ]
+        },
+        {
+            label: 'Accesorios',
+            submenu: [
+                {
+                    label: 'Sombrero',
+                    type: 'checkbox',
+                    checked: config.accessories?.hat ?? false,
+                    click: (menuItem) => {
+                        mainWindow?.webContents.send('accessory', 'hat', menuItem.checked);
+                        // Guardar estado
+                        const currentConfig = loadConfig();
+                        if (!currentConfig.accessories) currentConfig.accessories = {};
+                        currentConfig.accessories.hat = menuItem.checked;
+                        saveConfig(currentConfig);
+                    }
+                },
+                {
+                    label: 'Chaqueta Abierta',
+                    type: 'checkbox',
+                    checked: config.accessories?.jacket ?? false,
+                    click: (menuItem) => {
+                        mainWindow?.webContents.send('accessory', 'jacket', menuItem.checked);
+                        // Guardar estado
+                        const currentConfig = loadConfig();
+                        if (!currentConfig.accessories) currentConfig.accessories = {};
+                        currentConfig.accessories.jacket = menuItem.checked;
+                        saveConfig(currentConfig);
+                    }
+                }
             ]
         },
         {
             label: 'Animaciones',
             submenu: [
-                { label: 'Cola/Accesorios', click: () => mainWindow?.webContents.send('motion', 'Scene1') },
-                { label: 'Curiosa', click: () => mainWindow?.webContents.send('motion', 'haoqi') },
-                { label: 'Somnolienta', click: () => mainWindow?.webContents.send('motion', 'keshui') },
-                { label: 'Alma Saliendo', click: () => mainWindow?.webContents.send('motion', 'linghun') },
-                { label: 'Agitar Bandera', click: () => mainWindow?.webContents.send('motion', 'qizi') },
-                { label: 'Mover Cabeza', click: () => mainWindow?.webContents.send('motion', 'yaotou') },
-                { label: 'Temblar', click: () => mainWindow?.webContents.send('motion', 'zhentou') }
+                { label: 'Idle', click: () => mainWindow?.webContents.send('motion', 'idle') }
             ]
         },
         { type: 'separator' },

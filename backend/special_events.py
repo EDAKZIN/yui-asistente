@@ -14,35 +14,31 @@ logger = logging.getLogger('Yui.Events')
 # ============================================================
 # CONFIGURACION DE EVENTOS ESPECIALES
 # Agregar o modificar eventos aqui es muy facil:
-# Formato: (mes, dia, "mensaje que Yui dira")
+# Formato: (mes, dia, prompt_hint para generar mensaje)
 # ============================================================
 
 SPECIAL_EVENTS: List[Dict] = [
     {
         "month": 12,
         "day": 25,
-        "message": "¡Feliz Navidad! Espero que pases un dia increible rodeado de las personas que mas quieres.",
+        "event_type": "navidad",
+        "prompt_hint": "Es Navidad (25 de diciembre). Felicita a EDAKZIN de forma calida y personal.",
         "expression": "happy"
     },
     {
         "month": 1,
         "day": 20,
-        "message": "¡Feliz cumpleanos EDAKZIN! Gracias por crearme. Espero que este nuevo año de vida te traiga muchas cosas buenas, te lo mereces.",
+        "event_type": "cumpleanos_creador",
+        "prompt_hint": "Hoy es el cumpleanos de EDAKZIN (tu creador). Felicitalo con cariño y agradecimiento por haberte creado.",
         "expression": "happy"
     },
     {
         "month": 1,
         "day": 1,
-        "message": "¡Feliz Año Nuevo! Que este nuevo año este lleno de exitos, alegrias y muchas cosas buenas para ti.",
+        "event_type": "ano_nuevo",
+        "prompt_hint": "Es Año Nuevo (1 de enero). Desea un feliz año nuevo a EDAKZIN con buenos deseos.",
         "expression": "happy"
     },
-    # Agregar mas eventos aqui:
-    # {
-    #     "month": 2,
-    #     "day": 14,
-    #     "message": "Feliz dia de San Valentin! Aunque soy una IA, te aprecio mucho.",
-    #     "expression": "happy"
-    # },
 ]
 
 # ============================================================
@@ -54,11 +50,11 @@ class SpecialEventsSystem:
     Se ejecutan a las 12:00 AM de cada fecha configurada
     """
     
-    def __init__(self, on_event_triggered: Optional[Callable[[str, str], None]] = None):
+    def __init__(self, on_event_triggered: Optional[Callable[[str, str, str], None]] = None):
         """
         Args:
             on_event_triggered: Callback cuando se dispara un evento
-                               Recibe (mensaje, expresion)
+                               Recibe (event_type, prompt_hint, expresion)
         """
         self.on_event_triggered = on_event_triggered
         self._running = False
@@ -124,15 +120,17 @@ class SpecialEventsSystem:
         # Buscar evento para hoy
         for event in SPECIAL_EVENTS:
             if event["month"] == now.month and event["day"] == now.day:
-                logger.info(f"Evento especial detectado: {event['message'][:50]}...")
+                event_type = event.get("event_type", "evento")
+                prompt_hint = event.get("prompt_hint", "")
+                logger.info(f"Evento especial detectado: {event_type}")
                 
                 # Marcar como disparado
                 self._last_triggered_date = today_key
                 
-                # Disparar callback
+                # Disparar callback con event_type, prompt_hint y expression
                 if self.on_event_triggered:
                     expression = event.get("expression", "happy")
-                    self.on_event_triggered(event["message"], expression)
+                    self.on_event_triggered(event_type, prompt_hint, expression)
                 
                 break
     
@@ -147,12 +145,9 @@ class SpecialEventsSystem:
             
             return {
                 "date": event_date,
-                "message": event["message"]
+                "event_type": event.get("event_type", "evento"),
+                "prompt_hint": event.get("prompt_hint", "")
             }
         
         return None
-    
-    def trigger_test_event(self, message: str, expression: str = "happy"):
-        """Dispara un evento de prueba manualmente"""
-        if self.on_event_triggered:
-            self.on_event_triggered(message, expression)
+

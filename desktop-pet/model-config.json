@@ -1,6 +1,6 @@
 {
-    "modelPath": "./models/huohuo/huohuo/huohuo.model3.json",
-    "scale": 0.07,
+    "modelPath": "./models/siri/Siri VTS/siri.model3.json",
+    "scale": 0.09999999999999999,
     "position": {
         "x": 0,
         "y": 180
@@ -8,16 +8,16 @@
     "expressions": {
         "idle": null,
         "speaking": null,
-        "happy": "qizi1",
-        "angry": "angry",
-        "cry": "cry",
-        "sleepy": null
+        "happy": "excited",
+        "angry": "yanderee",
+        "sad": "sad",
+        "blush": "blush"
     },
     "motions": {
-        "idle": "Scene1",
-        "speaking": "yaotou",
-        "greeting": "qizi",
-        "thinking": "haoqi"
+        "idle": null,
+        "speaking": null,
+        "greeting": null,
+        "thinking": null
     },
     "subtitles": {
         "position": {
@@ -28,6 +28,10 @@
         "minWidth": 200,
         "maxWidth": 580,
         "yPosition": 85
+    },
+    "accessories": {
+        "hat": true,
+        "jacket": false
     },
     "windowX": 1623,
     "windowY": 481

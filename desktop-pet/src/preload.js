@@ -51,5 +51,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     saveSubtitleConfig: (config) => {
         return ipcRenderer.invoke('save-subtitle-config', config);
+    },
+    // Accesorios (hat, jacket)
+    onAccessory: (callback) => {
+        ipcRenderer.on('accessory', (event, type, enabled) => callback(type, enabled));
     }
 });

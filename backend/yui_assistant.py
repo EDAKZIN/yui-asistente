@@ -171,7 +171,7 @@ class YuiAssistant:
         self.llama.load_model()
         
         # Cargar XTTS v2
-        print("  [3/4] Cargando XTTS v2 con voz de Navia...")
+        print("  [3/4] Cargando XTTS v2 con voz clonada...")
         self.tts.load_model()
         
         # Cargar sistema de memoria

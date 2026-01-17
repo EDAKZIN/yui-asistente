@@ -666,6 +666,26 @@
 
                 app.stage.addChild(currentModel);
 
+                // Aplicar estado inicial de accesorios desde config
+                if (currentConfig.accessories) {
+                    setTimeout(() => {
+                        try {
+                            const coreModel = currentModel.internalModel.coreModel;
+                            if (currentConfig.accessories.hat) {
+                                coreModel.setParameterValueById('ParamCapOnOff', 1);
+                                console.log('[Init] Sombrero inicial: ON');
+                            }
+                            if (currentConfig.accessories.jacket) {
+                                coreModel.setParameterValueById('ParamJacketOnOff', 1);
+                                coreModel.setParameterValueById('ParamJacketChange', 1);
+                                console.log('[Init] Chaqueta abierta inicial: ON');
+                            }
+                        } catch (e) {
+                            console.error('[Init] Error aplicando accesorios iniciales:', e);
+                        }
+                    }, 500); // Pequeño delay para asegurar que el modelo esta listo
+                }
+
                 canvas.addEventListener('wheel', (e) => {
                     if (!configModeEnabled) return; // Solo en modo config
                     e.preventDefault();
@@ -756,8 +776,12 @@
             }
             console.log('[Expression] Aplicando:', name || 'Normal (reset)');
             try {
-                if (name === null) {
-                    currentModel.expression();
+                if (name === null || name === 'neutral') {
+                    // Resetear expresion - usar expressionManager para evitar expresion aleatoria
+                    const expressionManager = currentModel.internalModel?.motionManager?.expressionManager;
+                    if (expressionManager) {
+                        expressionManager.resetExpression?.();
+                    }
                     console.log('[Expression] Reset exitoso');
                 } else {
                     currentModel.expression(name);
@@ -765,6 +789,32 @@
                 }
             } catch (e) {
                 console.error('[Expression] Error:', e);
+            }
+        });
+
+        // Accesorios - manipular parametros directamente
+        window.electronAPI?.onAccessory((type, enabled) => {
+            if (!currentModel?.internalModel?.coreModel) {
+                console.log('[Accessory] Error: modelo no cargado');
+                return;
+            }
+            console.log('[Accessory] Toggle:', type, enabled);
+            try {
+                const coreModel = currentModel.internalModel.coreModel;
+                if (type === 'hat') {
+                    // ParamCapOnOff: 0 = sin sombrero, 1 = con sombrero
+                    coreModel.setParameterValueById('ParamCapOnOff', enabled ? 1 : 0);
+                    console.log('[Accessory] Sombrero:', enabled ? 'ON' : 'OFF');
+                } else if (type === 'jacket') {
+                    // ParamJacketOnOff y ParamJacketChange trabajan juntos
+                    // enabled = ambos en 1 (chaqueta abierta visible)
+                    // disabled = ambos en 0 (atuendo original/por defecto)
+                    coreModel.setParameterValueById('ParamJacketOnOff', enabled ? 1 : 0);
+                    coreModel.setParameterValueById('ParamJacketChange', enabled ? 1 : 0);
+                    console.log('[Accessory] Chaqueta abierta:', enabled ? 'SI' : 'NO (atuendo original)');
+                }
+            } catch (e) {
+                console.error('[Accessory] Error:', e);
             }
         });
 

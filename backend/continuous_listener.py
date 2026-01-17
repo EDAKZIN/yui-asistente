@@ -98,14 +98,15 @@ class ContinuousListener:
         # Detector de emociones para expresiones del modelo
         self.emotion_detector = EmotionDetector()
         
-        # Mapeo de emociones a expresiones del modelo (se puede configurar)
+        # Mapeo de emociones a expresiones del modelo Siri
         self.emotion_to_expression = {
-            'happy': 'qizi1',
-            'sad': 'cry',
-            'angry': 'angry',
-            'fear': 'white eyes',
-            'surprise': 'baozhen',
-            'neutral': 'neutral'
+            'happy': 'excited',
+            'sad': 'sad',
+            'angry': 'yanderee',
+            'fear': 'blackiris',
+            'disgust': 'blackiris',  # Asco también usa ojos negros
+            'surprise': 'excited',
+            'neutral': None  # Sin expresión = reset a neutral
         }
         
         # Sistema de eventos especiales (Navidad, cumpleanos, etc.)
@@ -428,15 +429,43 @@ NO ofrezcas poner otro recordatorio. Solo avísale que ya es hora."""
             import traceback
             logger.error(traceback.format_exc())
     
-    def _on_special_event(self, message: str, expression: str):
-        """Callback cuando se dispara un evento especial (Navidad, cumpleanos, etc.)"""
-        logger.info(f"Evento especial activado: {message[:50]}...")
+    def _on_special_event(self, event_type: str, prompt_hint: str, expression: str):
+        """Callback cuando se dispara un evento especial (Navidad, cumpleanos, etc.)
+        
+        Ahora genera el mensaje dinamicamente usando el LLM con el prompt_hint
+        """
+        logger.info(f"Evento especial activado: {event_type}")
+        
+        # Generar mensaje dinamico con LLM
+        try:
+            # Usar el LLM activo (local o Groq) para generar el mensaje
+            llm = self.yui.groq if self.yui.performance_mode and self.yui.groq else self.yui.llama
+            
+            # Prompt para que el LLM genere un mensaje de evento especial
+            event_prompt = f"""[EVENTO ESPECIAL: {event_type}]
+{prompt_hint}
+Genera un mensaje corto y emotivo (2-3 oraciones maximo). 
+Habla directamente a EDAKZIN en segunda persona.
+No uses asteriscos ni descripciones de acciones."""
+            
+            message = llm.generate_response(event_prompt)
+            
+            if not message or len(message.strip()) < 5:
+                # Fallback si el LLM falla
+                message = f"¡Hola! Hoy es un dia especial: {event_type}."
+                logger.warning(f"LLM no genero mensaje para evento, usando fallback")
+            
+            logger.info(f"Mensaje generado para {event_type}: {message[:50]}...")
+            
+        except Exception as e:
+            logger.error(f"Error generando mensaje de evento con LLM: {e}")
+            message = f"¡Hola! Hoy es un dia especial."
         
         print(f"\n[EVENTO ESPECIAL] Yui: {message}")
         self._notify_gui('notify_response', message)
         
         # Aplicar expresion correspondiente
-        expr_name = self.emotion_to_expression.get(expression, 'qizi1')
+        expr_name = self.emotion_to_expression.get(expression, 'excited')
         self._notify_gui('notify_expression', expr_name)
         
         # Sintetizar con TTS

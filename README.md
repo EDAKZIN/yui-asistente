@@ -25,7 +25,7 @@
 
 ```
 Usuario → faster-whisper → Comandos/LLM → Emociones → XTTS v2 → Audio
-  habla    (medium INT8)    (detecta)     (expresion)  (Navia)    (respuesta)
+  habla    (medium INT8)    (detecta)     (expresion)  (clonada)    (respuesta)
 ```
 
 ## 📋 Requisitos
