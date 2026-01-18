@@ -67,6 +67,7 @@ En `desktop-pet/model-config.json`, mapea las emociones del sistema a las expres
     "blush": "nombre-de-expresion-sonrojo"
   }
 }
+```
 
 **Reglas:**
 - Usa `null` si tu modelo NO tiene esa expresión
