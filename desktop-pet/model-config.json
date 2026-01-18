@@ -11,6 +11,9 @@
         "happy": "excited",
         "angry": "yanderee",
         "sad": "sad",
+        "fear": "blackiris",
+        "disgust": "blackiris",
+        "surprise": "excited",
         "blush": "blush"
     },
     "motions": {
