@@ -36,6 +36,15 @@ Usuario → faster-whisper → Comandos/LLM → Emociones → XTTS v2 → Audio
 - ~10GB VRAM peak durante uso activo (optimizado con GGUF Q5_K_M)
 - Windows 10/11
 
+## 📦 Assets Requeridos
+
+> **IMPORTANTE**: Este proyecto requiere assets que debes proveer tú mismo por razones de licencia/copyright.
+
+| Asset | Ubicación | Instrucciones |
+|-------|-----------|---------------|
+| Modelo Live2D | `desktop-pet/models/` | Ver [README](desktop-pet/models/README.md) |
+| Muestras de voz | `voice_samples/` | Ver [README](voice_samples/README.md) |
+
 ## 🔧 Instalacion
 
 ### Arquitectura
