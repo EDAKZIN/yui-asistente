@@ -226,7 +226,7 @@ yui-asistente/
 ## 🎨 Personalización de Voz
 
 Para cambiar la voz de Yui:
-1. Coloca archivos de audio (.wav, .ogg, .mp3) en `voice_samples/`
+1. Coloca archivos de audio (.wav) en `voice_samples/`
 2. Reinicia la aplicación
 3. XTTS usará las nuevas muestras automáticamente
 

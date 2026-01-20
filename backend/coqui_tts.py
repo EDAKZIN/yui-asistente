@@ -54,6 +54,7 @@ class CoquiTTS:
         self.voice_samples_dir = voice_samples_dir
         self._is_playing = False
         self._is_connected = False
+        self._cancel_synthesis = False  # Flag para cancelar síntesis en progreso
         self._on_synthesis_complete: Optional[Callable] = None
         self._lock = threading.Lock()
         
@@ -262,6 +263,9 @@ class CoquiTTS:
         if not text:
             return
         
+        # Resetear flag de cancelación
+        self._cancel_synthesis = False
+        
         # Si ya está hablando, interrumpir síntesis actual
         if self._is_playing:
             logger.info("Interrumpiendo síntesis actual para nueva...")
@@ -300,6 +304,12 @@ class CoquiTTS:
             
             # Esperar respuestas (playing -> done)
             while True:
+                # Verificar si se canceló la síntesis
+                if self._cancel_synthesis:
+                    logger.info("  Síntesis cancelada por interrupción")
+                    await self._send_stop_command()
+                    break
+                
                 try:
                     response = await asyncio.wait_for(
                         ws.recv(),
@@ -312,6 +322,9 @@ class CoquiTTS:
                         pass
                     elif status == 'done':
                         logger.info("  Síntesis streaming completada")
+                        break
+                    elif status == 'stopped':
+                        logger.info("  Síntesis detenida por comando stop")
                         break
                     elif status == 'error':
                         raise RuntimeError(data.get('message', 'Error desconocido'))
@@ -428,9 +441,22 @@ class CoquiTTS:
         self._is_connected = False
     
     def stop(self):
-        """Detiene la reproducción actual"""
+        """Detiene la reproducción actual y envía comando stop al servidor TTS"""
+        logger.info("  Deteniendo reproducción...")
+        
+        # Marcar para cancelar síntesis en progreso
+        self._cancel_synthesis = True
         self._is_playing = False
-        logger.info("  Reproducción detenida")
+        
+        # Enviar comando stop al servidor TTS (conexión rápida)
+        try:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(self._send_stop_command())
+            loop.close()
+            logger.info("  Reproducción detenida correctamente")
+        except Exception as e:
+            logger.warning(f"  Error enviando stop al servidor: {e}")
     
     def is_playing(self) -> bool:
         """Retorna True si hay audio reproduciéndose"""

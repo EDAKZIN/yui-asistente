@@ -102,11 +102,12 @@ class ContinuousListener:
         self.emotion_to_expression = {
             'happy': 'excited',
             'sad': 'sad',
+            'shy': 'blush',
             'angry': 'yanderee',
             'fear': 'blackiris',
             'disgust': 'blackiris',  # Asco también usa ojos negros
             'surprise': 'excited',
-            'neutral': None  # Sin expresión = reset a neutral
+            'neutral': 'neutral'  # Forzar reset a neutral en el frontend
         }
         
         # Sistema de eventos especiales (Navidad, cumpleanos, etc.)

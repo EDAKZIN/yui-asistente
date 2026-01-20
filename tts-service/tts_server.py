@@ -75,22 +75,18 @@ class TTSEngine:
         self._is_loaded = False
         
     def find_voice_samples(self):
-        """Busca muestras de voz en la carpeta"""
-        samples = []
-        for ext in ['*.wav', '*.ogg', '*.mp3', '*.flac']:
-            pattern = str(VOICE_SAMPLES_DIR / ext)
-            samples.extend(glob.glob(pattern))
+        """Busca muestras de voz WAV en la carpeta"""
+        pattern = str(VOICE_SAMPLES_DIR / '*.wav')
+        samples = glob.glob(pattern)
         
         if samples:
             logger.info(f"Encontradas {len(samples)} muestras de voz")
-            for s in samples[:3]:
-                logger.info(f"  - {os.path.basename(s)}")
-            if len(samples) > 3:
-                logger.info(f"  ... y {len(samples) - 3} más")
         else:
             logger.warning(f"No se encontraron muestras en {VOICE_SAMPLES_DIR}")
         
         return samples
+
+
     
     def load(self):
         """Carga el modelo XTTS v2 con RealtimeTTS (CUDA nativo)"""
@@ -115,8 +111,8 @@ class TTSEngine:
                 logger.error("No hay muestras de voz disponibles")
                 return False
             
-            speaker_wav = self.voice_samples[0]
-            logger.info(f"  Voz de referencia: {os.path.basename(speaker_wav)}")
+            # Mostrar info de muestras
+            logger.info(f"  Usando {len(self.voice_samples)} muestras de voz para clonación")
             
             # Verificar si hay modelo local
             local_model = MODELS_DIR / "v2.0.2"
@@ -126,7 +122,7 @@ class TTSEngine:
             # Crear engine CON DeepSpeed (instalado en venv compartido)
             self.engine = CoquiEngine(
                 model_name="tts_models/multilingual/multi-dataset/xtts_v2",
-                voice=speaker_wav,
+                voice=self.voice_samples,
                 language="es",
                 use_deepspeed=True,  # DeepSpeed habilitado
                 device=self.device,
@@ -154,11 +150,9 @@ class TTSEngine:
             logger.warning("Intentando sin DeepSpeed...")
             from RealtimeTTS import TextToAudioStream, CoquiEngine
             
-            speaker_wav = self.voice_samples[0] if self.voice_samples else ""
-            
             self.engine = CoquiEngine(
                 model_name="tts_models/multilingual/multi-dataset/xtts_v2",
-                voice=speaker_wav,
+                voice=self.voice_samples,
                 language="es",
                 use_deepspeed=False,
                 device=self.device,

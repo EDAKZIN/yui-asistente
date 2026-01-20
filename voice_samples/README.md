@@ -12,7 +12,7 @@ Debes proporcionar tus propias muestras de audio para el clonado de voz.
 
 Para que el TTS pueda clonar una voz correctamente, necesitas:
 
-1. **Formato**: `.wav` o `.ogg` (preferiblemente WAV 22050Hz mono)
+1. **Formato**: `.wav`
 2. **Duración**: Entre 5-30 segundos por archivo
 3. **Calidad**: Audio limpio, sin ruido de fondo ni música
 4. **Contenido**: Solo voz hablando (no cantar, no efectos)
@@ -54,4 +54,4 @@ Una vez que tengas tus muestras, el TTS las usará automáticamente para:
 
 ---
 
-**Nota**: Los archivos `.wav` y `.ogg` están ignorados por git para proteger tu privacidad y evitar problemas de copyright.
+**Nota**: Los archivos `.wav` están ignorados por git para proteger tu privacidad y evitar problemas de copyright.
