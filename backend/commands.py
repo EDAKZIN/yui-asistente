@@ -10,7 +10,6 @@ from typing import Tuple, Optional
 
 from web_search import web_search
 
-# Vision deshabilitada (Gemini removido)
 
 logger = logging.getLogger('Yui.Commands')
 
@@ -169,9 +168,6 @@ class CommandExecutor:
         logger.info("Inicializando modulo de comandos")
         logger.info(f"  Apps bloqueadas: {len(BLOCKED_APPS)}")
         logger.info(f"  Aliases configurados: {len(APP_ALIASES)}")
-        
-        # Vision deshabilitada
-        pass
     
     def is_blocked(self, app_name: str) -> bool:
         """
@@ -384,17 +380,7 @@ class CommandExecutor:
         logger.debug(f"web_search llamado con query: '{query}'")
         return web_search(query)
     
-    def describe_screen(self) -> Tuple[bool, str]:
-        """
-        Describe lo que Yui ve en la pantalla
-        NOTA: Visión deshabilitada (Gemini removido)
-        
-        Returns:
-            Tupla (exito, mensaje)
-        """
-        logger.info("Comando de visión recibido pero está deshabilitado")
-        return False, "Lo siento, mi visión no está disponible en este momento."
-    
+
     def execute(self, command_type: str, params: Optional[str] = None) -> Tuple[bool, str]:
         """
         Ejecuta un comando según su tipo

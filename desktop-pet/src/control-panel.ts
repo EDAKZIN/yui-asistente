@@ -15,7 +15,7 @@ declare global {
 }
 
 // Tipos
-type AppState = 'loading' | 'active' | 'listening' | 'processing' | 'sleeping' | 'muted';
+type AppState = 'loading' | 'active' | 'listening' | 'processing' | 'sleeping' | 'muted' | 'proactive' | 'waking';
 
 interface StateConfig {
     dotClass: string;
@@ -39,7 +39,9 @@ const stateConfig: Record<AppState, StateConfig> = {
     listening: { dotClass: 'listening', text: 'Escuchando...' },
     processing: { dotClass: 'processing', text: 'Procesando...' },
     sleeping: { dotClass: 'sleeping', text: 'En reposo' },
-    muted: { dotClass: 'muted', text: 'Silenciado' }
+    muted: { dotClass: 'muted', text: 'Silenciado' },
+    proactive: { dotClass: 'proactive', text: 'Comentando...' },
+    waking: { dotClass: 'waking', text: 'Despertando...' }
 };
 
 // Referencias a elementos del DOM
@@ -49,21 +51,28 @@ const elements = {
     muteIndicator: document.getElementById('muteIndicator')!,
     waveform: document.getElementById('waveform')!,
     micIcon: document.getElementById('micIcon')!,
-    transcriptContent: document.getElementById('transcriptContent')!,
-    responseContent: document.getElementById('responseContent')!,
     btnMute: document.getElementById('btnMute')!,
     btnSleep: document.getElementById('btnSleep')!,
     btnPerformance: document.getElementById('btnPerformance')!,
+    llmBadge: document.getElementById('llmBadge')!,
     btnSettings: document.getElementById('btnSettings')!,
     btnCloseSettings: document.getElementById('btnCloseSettings')!,
-    btnClearTranscript: document.getElementById('btnClearTranscript')!,
     settingsModal: document.getElementById('settingsModal')!,
     currentMuteKey: document.getElementById('currentMuteKey')!,
     btnChangeMuteKey: document.getElementById('btnChangeMuteKey')!,
     vadThreshold: document.getElementById('vadThreshold') as HTMLInputElement,
     vadThresholdValue: document.getElementById('vadThresholdValue')!,
     proactiveEnabled: document.getElementById('proactiveEnabled') as HTMLInputElement,
-    connectionStatus: document.getElementById('connectionStatus')!
+    connectionStatus: document.getElementById('connectionStatus')!,
+    // More Options Panel
+    moreOptionsPanel: document.getElementById('moreOptionsPanel')!,
+    moreOptionsHeader: document.getElementById('moreOptionsHeader')!,
+    memoryMonitor: document.getElementById('memoryMonitor') as HTMLInputElement,
+    detailedLogs: document.getElementById('detailedLogs') as HTMLInputElement,
+    statUptime: document.getElementById('statUptime')!,
+    statConversations: document.getElementById('statConversations')!,
+    consoleToggleBtn: document.getElementById('consoleToggleBtn')!,
+    consoleToggleText: document.getElementById('consoleToggleText')!
 };
 
 // WebSocket
@@ -162,6 +171,21 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                         updateState('sleeping');
                     }
                 }
+
+                // Persistir estado de rendimiento y actualizar badge LLM
+                if (message.data.is_performance_mode !== undefined) {
+                    state.isPerformanceMode = message.data.is_performance_mode;
+                    elements.btnPerformance.classList.toggle('active', state.isPerformanceMode);
+                    updateLlmBadge(state.isPerformanceMode);
+                }
+
+                // Sincronizar estados de "Más Opciones"
+                if (message.data.options) {
+                    const opts = message.data.options;
+                    elements.memoryMonitor.checked = opts.memory_monitoring || false;
+                    elements.detailedLogs.checked = opts.detailed_logs || false;
+                    updateConsoleState(opts.console_visible || false);
+                }
             }
             break;
 
@@ -172,14 +196,16 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
             break;
 
         case 'transcript':
-            if (message.data?.text) {
-                addTranscript(message.data.text);
-            }
+            // Transcript ya no se muestra en el panel
             break;
 
         case 'response':
-            if (message.data?.text) {
-                setResponse(message.data.text);
+            // Manejar respuestas de acciones (como get_session_stats)
+            if (message.action === 'get_session_stats' && message.data) {
+                updateSessionStats(message.data);
+            }
+            if (message.action === 'toggle_console' && message.data) {
+                updateConsoleState(message.data.visible);
             }
             break;
 
@@ -209,6 +235,8 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                 if (label) {
                     label.textContent = state.isPerformanceMode ? 'Rendimiento ✓' : 'Rendimiento';
                 }
+                // Actualizar badge de LLM
+                updateLlmBadge(state.isPerformanceMode);
             }
             break;
 
@@ -225,6 +253,18 @@ function updateConnectionStatus(connected: boolean): void {
     } else {
         elements.connectionStatus.classList.remove('connected');
         elements.connectionStatus.querySelector('.connection-text')!.textContent = 'Desconectado';
+    }
+}
+
+function updateLlmBadge(isPerformanceMode: boolean): void {
+    if (isPerformanceMode) {
+        elements.llmBadge.textContent = 'Groq';
+        elements.llmBadge.classList.add('groq');
+        elements.llmBadge.classList.remove('local');
+    } else {
+        elements.llmBadge.textContent = 'Local';
+        elements.llmBadge.classList.add('local');
+        elements.llmBadge.classList.remove('groq');
     }
 }
 
@@ -277,32 +317,61 @@ function updateMuteUI(): void {
     updateState(state.currentState);
 }
 
-function addTranscript(text: string): void {
-    const placeholder = elements.transcriptContent.querySelector('.transcript-placeholder');
-    if (placeholder) {
-        placeholder.remove();
+// === More Options Panel ===
+
+function formatUptime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
     }
-
-    const p = document.createElement('p');
-    p.textContent = text;
-    p.style.marginBottom = '8px';
-    p.style.paddingBottom = '8px';
-    p.style.borderBottom = '1px solid var(--border-color)';
-
-    elements.transcriptContent.appendChild(p);
-    elements.transcriptContent.scrollTop = elements.transcriptContent.scrollHeight;
+    return `${minutes}m`;
 }
 
-function setResponse(text: string): void {
-    const placeholder = elements.responseContent.querySelector('.response-placeholder');
-    if (placeholder) {
-        placeholder.remove();
-    }
+function toggleMoreOptions(): void {
+    elements.moreOptionsPanel.classList.toggle('expanded');
+}
 
-    elements.responseContent.innerHTML = '';
-    const p = document.createElement('p');
-    p.textContent = text;
-    elements.responseContent.appendChild(p);
+function setupCategoryCards(): void {
+    // Agregar listeners a cada cuadro
+    const optionCards = document.querySelectorAll('.option-card');
+
+    optionCards.forEach(card => {
+        card.addEventListener('click', (e) => {
+            // No expandir si se hizo click en un input o button
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.closest('button')) {
+                return;
+            }
+
+            card.classList.toggle('expanded');
+
+            // Si es el cuadro de sesión y se expandió, solicitar datos
+            if (card.id === 'cardSession' && card.classList.contains('expanded')) {
+                requestSessionStats();
+            }
+        });
+    });
+}
+
+function requestSessionStats(): void {
+    sendAction('get_session_stats');
+}
+
+function updateSessionStats(stats: { uptime_seconds: number; conversation_count: number }): void {
+    elements.statUptime.textContent = formatUptime(stats.uptime_seconds);
+    elements.statConversations.textContent = stats.conversation_count.toString();
+}
+
+function setupConsoleToggle(): void {
+    elements.consoleToggleBtn.addEventListener('click', () => {
+        sendAction('toggle_console');
+    });
+}
+
+function updateConsoleState(visible: boolean): void {
+    elements.consoleToggleText.textContent = visible ? 'Ocultar' : 'Mostrar';
+    elements.consoleToggleBtn.classList.toggle('active', visible);
 }
 
 // === Event Listeners ===
@@ -338,9 +407,17 @@ function setupEventListeners(): void {
         }
     });
 
-    // Clear transcript
-    elements.btnClearTranscript.addEventListener('click', () => {
-        elements.transcriptContent.innerHTML = '<p class="transcript-placeholder">Esperando audio...</p>';
+    // More Options Panel toggle
+    elements.moreOptionsHeader.addEventListener('click', toggleMoreOptions);
+
+    // Memory Monitor toggle
+    elements.memoryMonitor.addEventListener('change', () => {
+        sendAction('set_memory_monitoring', { enabled: elements.memoryMonitor.checked });
+    });
+
+    // Detailed Logs toggle
+    elements.detailedLogs.addEventListener('change', () => {
+        sendAction('set_detailed_logging', { enabled: elements.detailedLogs.checked });
     });
 
     // VAD threshold slider
@@ -387,6 +464,8 @@ function setupEventListeners(): void {
 function init(): void {
     console.log('Inicializando Panel de Control...');
     setupEventListeners();
+    setupCategoryCards();
+    setupConsoleToggle();
     connectWebSocket();
 
     // Listener para cuando la ventana se restaura desde bandeja

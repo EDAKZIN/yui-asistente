@@ -4,7 +4,9 @@ Expone funciones al frontend via WebSocket
 """
 
 import os
+import sys
 import json
+import ctypes
 import logging
 import threading
 from typing import Optional
@@ -30,6 +32,7 @@ class YuiGUIAPI:
         # Estado local
         self._is_muted = False
         self._mute_key = 'F1'
+        self._console_visible = not getattr(sys, 'frozen', False)  # Visible solo en desarrollo
         
         # Cargar mute_key guardada
         try:
@@ -70,15 +73,21 @@ class YuiGUIAPI:
         
         result = {
             'state': current_state,
-            'is_muted': self._is_muted,  # CORREGIDO: era 'muted' pero frontend espera 'is_muted'
-            'is_sleeping': is_sleeping,   # AGREGADO: para persistencia de sleeping
-            'is_performance_mode': is_performance_mode,  # AGREGADO: modo rendimiento
+            'is_muted': self._is_muted,
+            'is_sleeping': is_sleeping,
+            'is_performance_mode': is_performance_mode,
             'mute_key': self._mute_key,
             'vad_threshold': 0.65,
-            'proactive_enabled': True
+            'proactive_enabled': True,
+            # Estados de "Más Opciones"
+            'options': {
+                'memory_monitoring': getattr(self, '_memory_monitoring_enabled', False),
+                'detailed_logs': getattr(self, '_detailed_logs_enabled', False),
+                'console_visible': self._console_visible
+            }
         }
         
-        logger.info(f">>> Retornando: mute_key='{self._mute_key}', state='{current_state}', is_muted={self._is_muted}, is_sleeping={is_sleeping}, is_performance_mode={is_performance_mode}")
+        logger.info(f">>> Retornando: state='{current_state}', is_muted={self._is_muted}, options={result['options']}")
         return result
     
     def get_state(self) -> dict:
@@ -250,6 +259,99 @@ class YuiGUIAPI:
                 self.listener.stop()
             except Exception as e:
                 logger.error(f"Error deteniendo listener en cleanup: {e}")
+    
+    # ==================== Monitoreo y Estadísticas ====================
+    
+    def set_memory_monitoring(self, enabled: bool) -> dict:
+        """Activa/desactiva el monitor periódico de VRAM/RAM"""
+        try:
+            if self.yui and hasattr(self.yui, '_memory_monitor') and self.yui._memory_monitor:
+                if enabled:
+                    self.yui._memory_monitor.start_periodic_logging()
+                    logger.info("Monitor de memoria ACTIVADO")
+                else:
+                    self.yui._memory_monitor.stop_periodic_logging()
+                    logger.info("Monitor de memoria DESACTIVADO")
+                return {'memory_monitoring': enabled}
+            else:
+                logger.warning("Monitor de memoria no disponible")
+                return {'memory_monitoring': False, 'error': 'Monitor no disponible'}
+        except Exception as e:
+            logger.error(f"Error en set_memory_monitoring: {e}")
+            return {'memory_monitoring': False, 'error': str(e)}
+    
+    def set_detailed_logging(self, enabled: bool) -> dict:
+        """Activa/desactiva logs detallados (DEBUG) a archivo"""
+        try:
+            from logger import YuiLogger
+            YuiLogger.set_debug_enabled(enabled)
+            return {'detailed_logging': enabled}
+        except Exception as e:
+            logger.error(f"Error en set_detailed_logging: {e}")
+            return {'detailed_logging': False, 'error': str(e)}
+    
+    def get_session_stats(self) -> dict:
+        """Retorna estadísticas de la sesión actual (on-demand, lazy)"""
+        import time
+        
+        stats = {
+            'uptime_seconds': 0,
+            'conversation_count': 0,
+            'vram_mb': None
+        }
+        
+        try:
+            # Uptime desde inicio del listener
+            if self.listener and hasattr(self.listener, '_start_time'):
+                stats['uptime_seconds'] = int(time.time() - self.listener._start_time)
+            
+            # Contador de conversaciones
+            if self.listener and hasattr(self.listener, 'conversation_count'):
+                stats['conversation_count'] = self.listener.conversation_count
+            
+            # VRAM solo si monitor está disponible
+            if self.yui and hasattr(self.yui, '_memory_monitor') and self.yui._memory_monitor:
+                stats['vram_mb'] = round(self.yui._memory_monitor.get_vram_nvidia(), 0)
+        except Exception as e:
+            logger.error(f"Error obteniendo stats: {e}")
+        
+        return stats
+    
+    def toggle_console(self) -> dict:
+        """
+        Muestra u oculta la ventana de consola (solo Windows)
+        
+        Returns:
+            dict con estado actual de la consola
+        """
+        if sys.platform != 'win32':
+            return {'visible': True, 'error': 'Solo disponible en Windows'}
+        
+        try:
+            kernel32 = ctypes.WinDLL('kernel32')
+            user32 = ctypes.WinDLL('user32')
+            
+            hwnd = kernel32.GetConsoleWindow()
+            if not hwnd:
+                return {'visible': False, 'error': 'No hay ventana de consola'}
+            
+            SW_HIDE = 0
+            SW_SHOW = 5
+            
+            if self._console_visible:
+                user32.ShowWindow(hwnd, SW_HIDE)
+                self._console_visible = False
+                logger.info("Consola oculta")
+            else:
+                user32.ShowWindow(hwnd, SW_SHOW)
+                self._console_visible = True
+                logger.info("Consola visible")
+            
+            return {'visible': self._console_visible}
+            
+        except Exception as e:
+            logger.error(f"Error toggle consola: {e}")
+            return {'visible': self._console_visible, 'error': str(e)}
     
     # ==================== Callbacks desde backend ====================
     # Estas funciones son sobreescritas en run_electron.py para usar WebSocket

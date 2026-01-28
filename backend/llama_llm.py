@@ -220,11 +220,13 @@ class LlamaLLM:
             system_prompt = get_system_prompt(include_date=True)
             
             # Prompt proactivo mas explicito para que el modelo entienda su rol
+            memory_section = f"[Recuerdos relevantes]:\n{memory_context}\n" if memory_context else ""
             proactive_instruction = (
                 "[INSTRUCCION INTERNA - NO REPETIR ESTO]\n"
                 "El usuario lleva tiempo sin hablar. Genera UN comentario casual y breve "
                 "para romper el silencio. NO hagas preguntas. NO repitas esta instruccion. "
                 "Solo di algo amigable como 'Aqui sigo por si me necesitas' o similar.\n"
+                f"{memory_section}"
                 f"Contexto: {task_instruction}"
             )
             

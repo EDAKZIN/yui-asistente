@@ -248,23 +248,13 @@ class SimpleNameDetector:
         """
         self.name = name.lower()
         self.variations = [
-            name.lower(),
-            f"hey {name.lower()}",
-            f"oye {name.lower()}",
-            f"hola {name.lower()}",
-            f"ey {name.lower()}",
-            f"ei {name.lower()}",
-            # Variaciones fonéticas que Whisper realmente produce
-            "yui", "yuhi", "yuchi", "yuri", "yuki",
-            "llui", "lui", "iui", "yuy", "yuui",
-            "yoi", "yue", "yuei", "yuwi", "juhi",
-            "juyi", "juli", "guyi",
-            # Variaciones vistas en logs reales (solo las distintivas)
-            "yoy", "huey", "guey", "güey",
-            "yope", "yín", "yuey",
-            # Con 'despierta' para wake word (frases completas son seguras)
-            "yui despierta", "yoy despierta", "yo y despierta",
-            "huey despierta", "joy despierta", "hoy despierta",
+            # Palabra clave principal - REQUERIDA para despertar
+            "despierta", "despiértate", "despierte", "despertate",
+            # Combinaciones con nombre (muy seguras)
+            "yui despierta", "yui despierte", "yui despiértate",
+            "oye yui", "hey yui", "hola yui",
+            # Solo nombre directo (sin variaciones ambiguas)
+            "yui",
         ]
     
     def detect_in_text(self, text: str) -> bool:

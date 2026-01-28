@@ -29,7 +29,6 @@ tts-service/venv_tts/
 # Logs (se generan en cada ejecucion)
 # -----------------------------------------------------------------------------
 logs/*.log
-logs/yui_session_context.md
 
 # -----------------------------------------------------------------------------
 # Base de datos local (ChromaDB - memoria de Yui)

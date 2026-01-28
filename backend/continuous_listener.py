@@ -16,7 +16,6 @@ from wake_word import WhisperWakeWordDetector, SimpleNameDetector
 from reminders import ReminderSystem
 from emotion_detector import EmotionDetector
 from special_events import SpecialEventsSystem
-from session_context import SessionContext
 
 logger = logging.getLogger('Yui.Continuous')
 
@@ -116,10 +115,9 @@ class ContinuousListener:
         # Referencia al GUI API (para enviar actualizaciones al frontend)
         self.gui_api = None
         
-        # Contexto de sesión con archivo .md
-        from pathlib import Path
-        logs_dir = Path(__file__).parent.parent / "logs"
-        self.session_context = SessionContext(logs_dir=str(logs_dir))
+        # Estadísticas de sesión
+        self._start_time = time.time()
+        self.conversation_count = 0
         
         logger.info("ContinuousListener inicializado")
     
@@ -175,8 +173,6 @@ class ContinuousListener:
         """Callback al entrar en modo reposo"""
         logger.info("Entrando en modo REPOSO - liberando recursos...")
         
-        # Limpiar contexto de sesión
-        self.session_context.clear()
         
         # Log VRAM inicial
         try:
@@ -585,8 +581,9 @@ No uses asteriscos ni descripciones de acciones."""
             # 7. Guardar en memoria de CORTO PLAZO (sesión) para continuidad
             self.yui.memory.add_to_session(transcript, response)
             
-            # 7.5 Actualizar contexto de sesión (.md file)
-            self.session_context.add_exchange(transcript, response)
+            
+            # 7.6 Incrementar contador de conversaciones
+            self.conversation_count += 1
             
             # 8. Guardar en memoria de LARGO PLAZO (ChromaDB) si es relevante
             self.yui.memory.add_conversation(transcript, response)
@@ -849,8 +846,6 @@ Genera UN comentario corto (máximo 10 palabras) casual."""
         self.state_machine.transition_to(YuiState.ACTIVE)
         self._stop_event.clear()
         
-        # Iniciar contexto de sesión
-        self.session_context.start_session()
         
         # Iniciar VAD
         self.vad.start()

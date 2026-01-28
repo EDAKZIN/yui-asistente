@@ -17,11 +17,47 @@ from llama_llm import LlamaLLM
 from coqui_tts import CoquiTTS
 from memory_system import MemorySystem
 from commands import command_executor
+from diagnostics.memory_monitor import MemoryMonitor
 import logging
 import re
 
 # Groq LLM para modo rendimiento (lazy load)
 groq_llm = None
+
+logger = logging.getLogger('Yui.Assistant')
+
+
+def should_query_long_term_memory(user_input: str, session_history: list) -> bool:
+    """Decide si vale la pena consultar ChromaDB (memoria largo plazo)
+    
+    Evita latencia innecesaria consultando solo cuando tiene sentido.
+    """
+    text = user_input.lower()
+    
+    # 1. Palabras clave que sugieren memoria a largo plazo
+    memory_triggers = [
+        # Referencias al pasado
+        'recuerdas', 'recuerda', 'acordas', 'acuerdas',
+        'antes', 'ayer', 'la otra vez', 'hace tiempo',
+        'dijiste', 'mencionaste', 'hablamos', 'contaste',
+        # Preguntas sobre información personal
+        'mi nombre', 'mi cumpleaños', 'mi favorito', 'lo que me gusta',
+        'te conté', 'te dije', 'te mencioné',
+    ]
+    
+    if any(trigger in text for trigger in memory_triggers):
+        return True
+    
+    # 3. Preguntas sobre preferencias
+    preference_patterns = [
+        'qué me gusta', 'cuál es mi', 'qué prefiero',
+        'cuáles son mis', 'qué tipo de',
+    ]
+    if any(pattern in text for pattern in preference_patterns):
+        return True
+    
+    # Por defecto: NO consultar (evita latencia)
+    return False
 
 class YuiAssistant:
     """Asistente de voz Yui - Pipeline completo"""
@@ -90,6 +126,9 @@ class YuiAssistant:
         
         # Sistema de reflexión (lazy load después de memoria)
         self.reflection = None
+        
+        # Monitor de memoria (VRAM/RAM)
+        self._memory_monitor = MemoryMonitor(log_dir=self.project_root / 'logs')
     
     def enable_performance_mode(self) -> str:
         """Activa el modo rendimiento (Groq API en vez de Llama local)"""
@@ -364,53 +403,20 @@ Responde brevemente usando esta información."""
                 else:
                     return search_results
         
-        # Detectar comandos de VISION: "mira la pantalla", "qué ves", "describe la pantalla"
-        vision_patterns = [
-            r'(?:mira|ve|observa|describe|analiza|revisa)\s+(?:la\s+)?pantalla',
-            r'(?:qué|que)\s+(?:ves|puedes\s+ver|hay\s+en\s+pantalla)',
-            r'(?:dime|describe)\s+(?:qué|que)\s+(?:ves|hay)',
-            r'(?:qué|que)\s+(?:tengo|hay)\s+(?:en\s+)?(?:la\s+)?pantalla',
-            r'(?:lee|leer)\s+(?:la\s+)?pantalla',
-            r'mira\s+(?:mi\s+)?pantalla',  # "mira mi pantalla", "mira pantalla"
-        ]
         
-        for pattern in vision_patterns:
-            if re.search(pattern, text_lower):
-                self.logger.info("Comando detectado: vision (Florence-2)")
-                
-                # Detectar si es OCR o descripcion general
-                if 'lee' in text_lower or 'leer' in text_lower or 'texto' in text_lower:
-                    success, result = command_executor.read_screen_text()
-                    if success:
-                        # Pasar OCR al LLM para respuesta natural EN ESPAÑOL
-                        prompt_with_vision = f"[Texto detectado en pantalla (en ingles)]: {result}\n\nTraduce y resume brevemente en español lo que leiste."
-                        return self.get_current_llm().generate_response(prompt_with_vision, use_history=False)
-                    return result
-                else:
-                    success, description = command_executor.describe_screen()
-                    if success:
-                        # Usar contexto inteligente (sesión + largo plazo filtrado)
-                        smart_context = ""
-                        try:
-                            smart_context = self.memory.get_smart_context(description, min_relevance=0.6)
-                        except:
-                            pass
-                        
-                        # Prompt con contexto filtrado
-                        prompt_with_vision = f"""[Lo que ves en la pantalla]: {description}
-{smart_context}
-
-Haz UN comentario breve y natural como Yui sobre lo que el usuario está haciendo.
-- Si reconoces algo (juego, programa, video): comenta al respecto
-- Si no estás segura: pregunta con curiosidad ("¿eso es X?")
-- Nunca describas literalmente cada elemento
-- NO uses *expresiones* (como *sonríe*), las expresiones son automáticas
-- Respuesta en español, 1-2 oraciones máximo."""
-                        return self.get_current_llm().generate_response(prompt_with_vision, use_history=False)
-                    return description
+        # Conversación normal - usar LLM con filtrado inteligente de memoria
+        long_term_ctx = ""
+        if should_query_long_term_memory(transcript, self.memory.session_history):
+            long_term_ctx = self.memory.search_relevant_context(transcript, n_results=3)
+            if long_term_ctx:
+                logger.debug(f"ChromaDB consultado: {len(long_term_ctx)} chars")
         
-        # Conversación normal - usar LLM
-        return self.get_current_llm().generate_response(transcript)
+        # Si hay contexto de largo plazo, incluirlo en el prompt
+        if long_term_ctx:
+            enriched_prompt = f"[Recuerdos relevantes]:\n{long_term_ctx}\n\n{transcript}"
+            return self.get_current_llm().generate_response(enriched_prompt)
+        else:
+            return self.get_current_llm().generate_response(transcript)
     
     def run_interactive(self):
         """Modo interactivo continuo"""

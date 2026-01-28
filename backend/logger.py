@@ -13,6 +13,7 @@ class YuiLogger:
     
     _initialized = False
     logger = None
+    _debug_handler = None  # Referencia para toggle dinámico
     
     @classmethod
     def setup(cls, log_dir: str, name: str = 'Yui', level=logging.DEBUG):
@@ -75,18 +76,18 @@ class YuiLogger:
         if debug_file_path.exists():
             debug_file_path.unlink()
         
-        debug_handler = logging.FileHandler(
+        cls._debug_handler = logging.FileHandler(
             debug_file_path,
             mode='w',
             encoding='utf-8'
         )
-        debug_handler.setLevel(logging.DEBUG)  # TODO incluyendo DEBUG
+        cls._debug_handler.setLevel(logging.WARNING)  # Por defecto OFF (solo WARNING+)
         debug_formatter = logging.Formatter(
             '%(asctime)s.%(msecs)03d | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        debug_handler.setFormatter(debug_formatter)
-        cls.logger.addHandler(debug_handler)
+        cls._debug_handler.setFormatter(debug_formatter)
+        cls.logger.addHandler(cls._debug_handler)
         
         cls._initialized = True
         cls.logger.info("=" * 60)
@@ -103,3 +104,21 @@ class YuiLogger:
         if not cls._initialized:
             raise RuntimeError("Logger no inicializado. Llama a YuiLogger.setup() primero")
         return cls.logger
+    
+    @classmethod
+    def set_debug_enabled(cls, enabled: bool) -> bool:
+        """
+        Activa/desactiva logs detallados (DEBUG) en archivo yui_debug.log
+        
+        Args:
+            enabled: True para activar DEBUG, False para solo WARNING+
+        
+        Returns:
+            Estado actual del debug logging
+        """
+        if cls._debug_handler:
+            level = logging.DEBUG if enabled else logging.WARNING
+            cls._debug_handler.setLevel(level)
+            cls.logger.info(f"Logs detallados: {'ACTIVADOS' if enabled else 'DESACTIVADOS'}")
+        return enabled
+

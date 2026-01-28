@@ -14,12 +14,15 @@
         <header class="header">
             <div class="logo">
                 <span class="logo-text">Yui</span>
-                <span class="version">v1.0</span>
+                <span class="version">v6.2</span>
             </div>
             <div class="status-group">
                 <div class="status-indicator" id="statusIndicator">
                     <span class="status-dot" id="statusDot"></span>
                     <span class="status-text" id="statusText">Conectando...</span>
+                </div>
+                <div class="llm-indicator" id="llmIndicator" title="Modelo LLM activo">
+                    <span class="llm-badge" id="llmBadge">Local</span>
                 </div>
                 <div class="mute-indicator" id="muteIndicator" style="display: none;">
                     <span class="mute-icon">🔇</span>
@@ -49,24 +52,78 @@
                 </div>
             </div>
 
-            <!-- Transcripción en vivo -->
-            <div class="transcript-panel">
-                <div class="transcript-header">
-                    <span>Transcripción</span>
-                    <button class="btn-clear" id="btnClearTranscript" title="Limpiar">✕</button>
+            <!-- Panel Más Opciones -->
+            <div class="more-options-panel" id="moreOptionsPanel">
+                <div class="more-options-header" id="moreOptionsHeader">
+                    <span>Más opciones</span>
+                    <svg class="chevron-icon" id="chevronIcon" viewBox="0 0 24 24" width="16" height="16">
+                        <path d="M7 10l5 5 5-5z" fill="currentColor" />
+                    </svg>
                 </div>
-                <div class="transcript-content" id="transcriptContent">
-                    <p class="transcript-placeholder">Esperando audio...</p>
-                </div>
-            </div>
+                <div class="more-options-content" id="moreOptionsContent">
+                    <div class="options-list">
+                        <!-- Monitor VRAM/RAM -->
+                        <div class="option-row">
+                            <div class="option-info">
+                                <svg viewBox="0 0 24 24" width="18" height="18">
+                                    <path
+                                        d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"
+                                        fill="currentColor" />
+                                </svg>
+                                <span>Monitor VRAM/RAM</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="memoryMonitor">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
 
-            <!-- Respuesta de Yui -->
-            <div class="response-panel">
-                <div class="response-header">
-                    <span>Yui</span>
-                </div>
-                <div class="response-content" id="responseContent">
-                    <p class="response-placeholder">...</p>
+                        <!-- Logs Detallados -->
+                        <div class="option-row">
+                            <div class="option-info">
+                                <svg viewBox="0 0 24 24" width="18" height="18">
+                                    <path
+                                        d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-9-7h6v2H9v-2zm0 4h6v2H9v-2z"
+                                        fill="currentColor" />
+                                </svg>
+                                <span>Logs Detallados</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="detailedLogs">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Consola -->
+                        <div class="option-row">
+                            <div class="option-info">
+                                <svg viewBox="0 0 24 24" width="18" height="18">
+                                    <path
+                                        d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zM7.5 17l-1.41-1.41L8.67 13l-2.59-2.59L7.5 9l4 4-4 4z"
+                                        fill="currentColor" />
+                                </svg>
+                                <span>Consola</span>
+                            </div>
+                            <button class="option-btn" id="consoleToggleBtn">
+                                <span id="consoleToggleText">Mostrar</span>
+                            </button>
+                        </div>
+
+                        <!-- Sesión -->
+                        <div class="option-row">
+                            <div class="option-info">
+                                <svg viewBox="0 0 24 24" width="18" height="18">
+                                    <path
+                                        d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"
+                                        fill="currentColor" />
+                                </svg>
+                                <span>Sesión</span>
+                            </div>
+                            <div class="session-stats">
+                                <span id="statUptime">--</span> · <span id="statConversations">--</span> chats
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>

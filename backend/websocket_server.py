@@ -111,6 +111,20 @@ class YuiWebSocketServer:
                 enabled = params.get('enabled', True)
                 result = self.gui_api.set_proactive_enabled(enabled)
             
+            elif action == 'set_memory_monitoring':
+                enabled = params.get('enabled', False)
+                result = self.gui_api.set_memory_monitoring(enabled)
+            
+            elif action == 'set_detailed_logging':
+                enabled = params.get('enabled', False)
+                result = self.gui_api.set_detailed_logging(enabled)
+            
+            elif action == 'get_session_stats':
+                result = self.gui_api.get_session_stats()
+            
+            elif action == 'toggle_console':
+                result = self.gui_api.toggle_console()
+            
             elif action == 'shutdown':
                 # Reiniciar todo el sistema
                 logger.info("Comando de reinicio recibido - reiniciando Yui...")

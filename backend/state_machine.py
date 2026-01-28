@@ -19,7 +19,9 @@ class YuiState(Enum):
     LISTENING = "listening"    # VAD detectó voz, grabando
     PROCESSING = "processing"  # Procesando respuesta
     PROACTIVE = "proactive"    # Haciendo comentario proactivo
+    WAKING = "waking"          # Despertando del modo reposo
     SLEEPING = "sleeping"      # Modo reposo (bajo recursos)
+
 
 
 # NOTA: Comentarios proactivos ahora se generan dinámicamente con LLM en continuous_listener.py

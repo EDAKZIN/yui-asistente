@@ -254,13 +254,24 @@ class MemorySystem:
             if not results['documents'] or not results['documents'][0]:
                 return ""
             
-            # Construir contexto
+            # Filtrar por relevancia (distancia < 0.7 = relevante)
+            # ChromaDB usa distancia coseno: 0 = idéntico, 2 = opuesto
+            distances = results.get('distances', [[]])[0]
+            if distances and distances[0] > 0.7:
+                logger.debug(f"Contexto descartado: distancia {distances[0]:.2f} > 0.7")
+                return ""
+            
+            # Construir contexto solo con resultados relevantes
             context_parts = []
-            for doc, metadata in zip(results['documents'][0], results['metadatas'][0]):
-                context_parts.append(f"[Conversación previa: {doc}]")
+            for i, (doc, metadata) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
+                if i < len(distances) and distances[i] <= 0.7:
+                    context_parts.append(f"[Conversación previa: {doc}]")
+            
+            if not context_parts:
+                return ""
             
             context = "\n".join(context_parts)
-            logger.debug(f" Contexto recuperado: {len(context_parts)} conversaciones")
+            logger.debug(f"Contexto recuperado: {len(context_parts)} conversaciones relevantes")
             
             return context
             
