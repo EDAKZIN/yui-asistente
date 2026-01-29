@@ -17,7 +17,7 @@
 - **Subtitulos sincronizados**: Aparecen exactamente cuando el audio empieza
 - **Recordatorios**: Sistema de recordatorios por voz
 - **Comentarios proactivos**: Yui comenta cuando llevas tiempo sin hablar
-- **Modo reposo**: Di "descansa" para liberar VRAM, di "Yui" para despertar
+- **Modo reposo**: Di "descansa" para liberar VRAM, di "despierta" para despertar
 - **Gestión automática de VRAM**: Los modelos se descargan/cargan según el estado
 - **Configuracion desde tray**: Ajusta escala, subtitulos y mas desde el menu
 
@@ -126,7 +126,7 @@ Este script inicia automáticamente:
 ### Espera ~2-3 minutos la primera vez (carga de modelos)
 
 **Para interactuar:**
-1. Di "Yui" seguido de tu mensaje
+1. Di "despierta" o "Yui" seguido de tu mensaje
 2. Yui responderá con voz clonada
 
 ## Interfaz
@@ -290,4 +290,4 @@ Apps bloqueadas por seguridad: cmd, powershell, regedit, taskmgr, diskpart, y m�
 MIT License - Creado por **EDAKZIN** 🚀
 
 ---
-**Versión 6.2.0** - Última actualización: 2026-01-16
+**Versión 6.2.0** - Última actualización: 2026-01-29
