@@ -76,6 +76,19 @@ desktop-pet/models/*
 !desktop-pet/models/README.md
 
 # -----------------------------------------------------------------------------
+# Animaciones FBX (copyright Mixamo, no incluir en repo)
+# -----------------------------------------------------------------------------
+desktop-pet/assets/animations/*.fbx
+!desktop-pet/assets/animations/README.md
+
+# -----------------------------------------------------------------------------
+# Items 3D (copyright, no incluir en repo)
+# -----------------------------------------------------------------------------
+desktop-pet/assets/items/*.glb
+desktop-pet/assets/items/*.gltf
+!desktop-pet/assets/items/README.md
+
+# -----------------------------------------------------------------------------
 # Voice Samples (copyright, no incluir en repo)
 # -----------------------------------------------------------------------------
 voice_samples/*.wav

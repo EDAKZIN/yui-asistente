@@ -1,26 +1,47 @@
 {
-    "modelPath": "./models/siri/Siri VTS/siri.model3.json",
-    "scale": 0.09999999999999999,
+    "modelPath": "./models/Yui_model/Yui.vrm",
+    "scale": 2.0000000000000036,
     "position": {
-        "x": 0,
-        "y": 180
+        "x": -0.10625000000000007,
+        "y": -1.3687500000000012
     },
     "expressions": {
-        "idle": null,
-        "speaking": null,
-        "happy": "excited",
-        "angry": "yanderee",
+        "happy": "happy",
         "sad": "sad",
-        "fear": "blackiris",
-        "disgust": "blackiris",
-        "surprise": "excited",
-        "blush": "blush"
+        "angry": "angry",
+        "fear": "surprised",
+        "disgust": "angry",
+        "surprise": "surprised",
+        "neutral": "neutral"
     },
-    "motions": {
-        "idle": null,
-        "speaking": null,
-        "greeting": null,
-        "thinking": null
+    "lipSync": [
+        "aa",
+        "ih",
+        "ou",
+        "ee",
+        "oh"
+    ],
+    "posturePresets": {
+        "happy": {
+            "chestPitch": -3,
+            "headPitch": -2
+        },
+        "sad": {
+            "chestPitch": 6,
+            "headPitch": 5
+        },
+        "angry": {
+            "chestYaw": 4,
+            "headYaw": 3
+        },
+        "fear": {
+            "chestPitch": 3,
+            "headPitch": -3
+        },
+        "neutral": {
+            "chestPitch": 0,
+            "headPitch": 0
+        }
     },
     "subtitles": {
         "position": {
@@ -32,10 +53,7 @@
         "maxWidth": 580,
         "yPosition": 85
     },
-    "accessories": {
-        "hat": true,
-        "jacket": false
-    },
-    "windowX": 1623,
-    "windowY": 481
+    "windowX": 1598,
+    "windowY": 487,
+    "brightness": 1.4
 }

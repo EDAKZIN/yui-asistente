@@ -72,7 +72,10 @@ const elements = {
     statUptime: document.getElementById('statUptime')!,
     statConversations: document.getElementById('statConversations')!,
     consoleToggleBtn: document.getElementById('consoleToggleBtn')!,
-    consoleToggleText: document.getElementById('consoleToggleText')!
+    consoleToggleText: document.getElementById('consoleToggleText')!,
+    // Brightness
+    brightnessSlider: document.getElementById('brightnessSlider') as HTMLInputElement,
+    brightnessValue: document.getElementById('brightnessValue')!
 };
 
 // WebSocket
@@ -185,6 +188,13 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                     elements.memoryMonitor.checked = opts.memory_monitoring || false;
                     elements.detailedLogs.checked = opts.detailed_logs || false;
                     updateConsoleState(opts.console_visible || false);
+                }
+
+                // Sincronizar brillo desde config
+                if (message.data.brightness !== undefined) {
+                    const brightness = message.data.brightness;
+                    elements.brightnessSlider.value = brightness.toString();
+                    elements.brightnessValue.textContent = Math.round(brightness * 100) + '%';
                 }
             }
             break;
@@ -432,6 +442,16 @@ function setupEventListeners(): void {
         sendAction('set_proactive_enabled', { enabled: elements.proactiveEnabled.checked });
     });
 
+    // Brightness slider
+    elements.brightnessSlider.addEventListener('input', () => {
+        const value = parseFloat(elements.brightnessSlider.value);
+        elements.brightnessValue.textContent = Math.round(value * 100) + '%';
+        // Enviar brillo a la ventana pet via IPC
+        if ((window as any).electronAPI?.setBrightness) {
+            (window as any).electronAPI.setBrightness(value);
+        }
+    });
+
     // Change mute key
     let waitingForKey = false;
     elements.btnChangeMuteKey.addEventListener('click', () => {
@@ -467,6 +487,15 @@ function init(): void {
     setupCategoryCards();
     setupConsoleToggle();
     connectWebSocket();
+
+    // Recibir brillo guardado desde main.ts (via IPC)
+    if ((window as any).electronAPI?.onInitBrightness) {
+        (window as any).electronAPI.onInitBrightness((value: number) => {
+            console.log('[Brillo] Valor inicial recibido:', value);
+            elements.brightnessSlider.value = value.toString();
+            elements.brightnessValue.textContent = Math.round(value * 100) + '%';
+        });
+    }
 
     // Listener para cuando la ventana se restaura desde bandeja
     if (window.electron?.onWindowRestored) {

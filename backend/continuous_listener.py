@@ -16,6 +16,7 @@ from wake_word import WhisperWakeWordDetector, SimpleNameDetector
 from reminders import ReminderSystem
 from emotion_detector import EmotionDetector
 from special_events import SpecialEventsSystem
+from vrm_config import VRMConfig
 
 logger = logging.getLogger('Yui.Continuous')
 
@@ -97,17 +98,8 @@ class ContinuousListener:
         # Detector de emociones para expresiones del modelo
         self.emotion_detector = EmotionDetector()
         
-        # Mapeo de emociones a expresiones del modelo Siri
-        self.emotion_to_expression = {
-            'happy': 'excited',
-            'sad': 'sad',
-            'shy': 'blush',
-            'angry': 'yanderee',
-            'fear': 'blackiris',
-            'disgust': 'blackiris',  # Asco también usa ojos negros
-            'surprise': 'excited',
-            'neutral': 'neutral'  # Forzar reset a neutral en el frontend
-        }
+        # Configuracion VRM centralizada (lee model-config.json)
+        self.vrm_config = VRMConfig.get_instance()
         
         # Sistema de eventos especiales (Navidad, cumpleanos, etc.)
         self.special_events = SpecialEventsSystem(on_event_triggered=self._on_special_event)
@@ -150,8 +142,8 @@ class ContinuousListener:
             # Detectar emocion
             emotion = self.emotion_detector.detect(response_text)
             
-            # Mapear a expresion del modelo
-            expression = self.emotion_to_expression.get(emotion, 'neutral')
+            # Mapear a expresion del modelo (desde model-config.json)
+            expression = self.vrm_config.get_expression(emotion)
             
             logger.info(f"Emocion detectada: {emotion} -> expresion: {expression}")
             
@@ -462,7 +454,7 @@ No uses asteriscos ni descripciones de acciones."""
         self._notify_gui('notify_response', message)
         
         # Aplicar expresion correspondiente
-        expr_name = self.emotion_to_expression.get(expression, 'excited')
+        expr_name = self.vrm_config.get_expression(expression)
         self._notify_gui('notify_expression', expr_name)
         
         # Sintetizar con TTS

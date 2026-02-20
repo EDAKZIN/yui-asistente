@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:58765">
+        content="default-src 'self' blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' ws://localhost:58765 blob: data:">
     <title>Yui Desktop Pet</title>
     <style>
         * {
@@ -56,6 +56,7 @@
             font-size: 12px;
             background: rgba(0, 0, 0, 0.8);
             padding: 15px;
+            white-space: pre-line;
             border-radius: 8px;
             max-width: 300px;
         }
@@ -298,38 +299,125 @@
         <div class="subtitle-hint">Controles en pantalla</div>
     </div>
 
-    <script src="./lib/pixi.min.js"></script>
-    <script src="./lib/live2dcubismcore.min.js"></script>
-    <script src="./lib/pixi-live2d-display.min.js"></script>
+    <!-- Three.js + VRM (reemplaza PIXI + Live2D) -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./node_modules/three/build/three.module.js",
+            "three/addons/": "./node_modules/three/examples/jsm/",
+            "@pixiv/three-vrm": "./node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
+            "vrm-mixamo-retarget": "./node_modules/vrm-mixamo-retarget/dist/index.esm.js"
+        }
+    }
+    </script>
 
-    <script>
+    <script type="module">
+        // === THREE.JS + VRM IMPORTS ===
+        import * as THREE from 'three';
+        import { GLTFLoader } from './node_modules/three/examples/jsm/loaders/GLTFLoader.js';
+        import { FBXLoader } from './node_modules/three/examples/jsm/loaders/FBXLoader.js';
+        import { VRMLoaderPlugin, VRMUtils, MToonMaterialLoaderPlugin } from '@pixiv/three-vrm';
+        import { retargetAnimation } from 'vrm-mixamo-retarget';
+
+        // === SAFE MTOON LOADER PLUGIN ===
+        // Intercepta la carga de materiales MToon para sanear texturas faltantes (VRM 0.0 -> 1.0/2.0)
+        class SafeMToonMaterialLoaderPlugin extends MToonMaterialLoaderPlugin {
+            async _parseMToonMaterial(materialJson, textureSplitter) {
+                // Sanear texturas: si el índice es -1 o inválido, eliminar la referencia para evitar errores de colorSpace
+                const textureKeys = ['mainTex', 'shadeTexture', 'bumpMap', 'rimMultiplyTexture', 't_SphereAdd', 'uvBoundMask'];
+                const texProps = materialJson.textureProperties || {};
+
+                console.log('[SafeMToon] Procesando material:', materialJson.name, materialJson.textureProperties);
+
+                for (const key of textureKeys) {
+                    // Si la propiedad existe pero es -1 (común en exports de UniVRM antiguos), borrarla
+                    if (texProps[key] === -1) {
+                        console.warn(`[SafeMToon] Eliminando textura inválida ${key} en material ${materialJson.name}`);
+                        delete texProps[key];
+                    }
+                }
+
+                return super._parseMToonMaterial(materialJson, textureSplitter);
+            }
+        }
+
+        // === VARIABLES GLOBALES ===
         let currentConfig = null;
-        let currentModel = null;
-        let currentScale = 0.15;
+        let currentVRM = null;  // Reemplaza currentModel (ahora es VRM)
+        let currentScale = 1.0;  // Escala base para VRM
         let saveTimeout = null;
         let canvasRect = null;
         let isDragging = false;
         let dragStartX = 0;
         let dragStartY = 0;
-        let configModeEnabled = false; // Solo ajustar escala cuando esta activo
+        let configModeEnabled = false;
+
+        // Three.js renderer, scene, camera
+        let renderer = null;
+        let scene = null;
+        let camera = null;
+        let clock = new THREE.Clock();
+        // Luces (para control de brillo)
+        let ambientLight = null;
+        let directionalLight = null;
+        let fillLight = null;
 
         // Mouse tracking suave
         let mouseTrackingEnabled = true;
         let motionPlaying = false;
+        // Variables para LookAt (normalizadas 0.0 - 1.0)
+        let targetMouseX = 0.5;
+        let targetMouseY = 0.5;
+
+        // === SISTEMA DE ANIMACIONES (FBX retargueteadas) ===
+        let animMixer = null;               // THREE.AnimationMixer
+        let isPlayingClipAnimation = false;  // Flag: un clip FBX esta activo
+        let tabletModel = null;              // Modelo GLB de la tablet
+        const animationClips = {};           // { 'hello': AnimationClip, 'tablet': AnimationClip }
+        let vrmRestPose = null;              // Estado completo de huesos despues de la pose inicial
+
+        // Escuchar posición del mouse desde Main Process (global tracking)
+        if (window.electronAPI) {
+            window.electronAPI.onMousePosition((pos) => {
+                if (!mouseTrackingEnabled) return;
+                // Normalizar coordenadas a 0..1 relativo a la ventana
+                targetMouseX = pos.x / window.innerWidth;
+                targetMouseY = pos.y / window.innerHeight;
+            });
+            // Activar tracking en main process
+            window.electronAPI.startMouseTracking();
+        } else {
+            // Fallback para desarrollo en navegador web normal
+            document.addEventListener('mousemove', (e) => {
+                targetMouseX = e.clientX / window.innerWidth;
+                targetMouseY = e.clientY / window.innerHeight;
+            });
+        }
         let targetX = 0;
         let targetY = 0;
-        let currentX = 0;
-        let currentY = 0;
+        let currentLookX = 0;
+        let currentLookY = 0;
         const LERP_SPEED = 0.08;
+
+        // Lip-sync
+        let isSpeaking = false;
+        let currentUtteranceId = null;
+        let smoothedMouthOpen = 0;
+        const LIP_LERP_SPEED = 0.3;
+
+        // Blink y Breath (timers para update)
+        let blinkTimer = 0;
+        let nextBlinkTime = 3 + Math.random() * 4;
+        let breathTimer = 0;
 
         // Sistema de subtítulos
         let ws = null;
         let subtitleElement = null;
         let typewriterTimeout = null;
         let pendingYuiResponse = null;
-        let subtitleHideTimer = null;  // Timer para ocultar subtítulo automáticamente
+        let subtitleHideTimer = null;
 
-        //Configuracion de subtitulos (se carga de model-config.json)
+        // Configuracion de subtitulos
         let subtitleConfig = {
             yPosition: 40,
             fontSize: 18
@@ -405,9 +493,9 @@
                 return await response.json();
             } catch (e) {
                 return {
-                    modelPath: './models/huohuo/huohuo/huohuo.model3.json',
-                    scale: 0.15,
-                    position: { x: 0, y: 180 }
+                    modelPath: './models/Yui.vrm',
+                    scale: 1.0,
+                    position: { x: 0, y: 0 }
                 };
             }
         }
@@ -426,25 +514,464 @@
             return start + (end - start) * factor;
         }
 
-        // Actualizar eye tracking con interpolacion suave
-        function updateEyeTracking() {
-            if (!currentModel?.internalModel?.coreModel || !canvasRect) return;
+        // === VRM: Actualizar LookAt con interpolacion suave ===
+        function updateLookAt() {
+            if (!currentVRM || !canvasRect) return;
             if (!mouseTrackingEnabled || motionPlaying) return;
 
-            currentX = lerp(currentX, targetX, LERP_SPEED);
-            currentY = lerp(currentY, targetY, LERP_SPEED);
+            currentLookX = lerp(currentLookX, targetX, LERP_SPEED);
+            currentLookY = lerp(currentLookY, targetY, LERP_SPEED);
 
             try {
-                currentModel.internalModel.coreModel.setParameterValueById('ParamAngleX', currentX * 30);
-                currentModel.internalModel.coreModel.setParameterValueById('ParamAngleY', -currentY * 30);
-                currentModel.internalModel.coreModel.setParameterValueById('ParamBodyAngleX', currentX * 10);
-            } catch { }
+                // VRM LookAt - mover target en espacio 3D
+                if (currentVRM.lookAt) {
+                    const lookTarget = new THREE.Vector3(
+                        currentLookX * 2,  // X: izquierda/derecha
+                        currentLookY * 2,  // Y: arriba/abajo
+                        1.0                // Z: siempre adelante
+                    );
+                    currentVRM.lookAt.target = lookTarget;
+                }
+            } catch (e) {
+                console.warn('[LookAt] Error:', e);
+            }
         }
 
-        // Loop de animacion
+        // === VRM: Blinking automático ===
+        function updateBlink(delta) {
+            if (!currentVRM?.expressionManager) return;
+
+            blinkTimer += delta;
+            if (blinkTimer > nextBlinkTime) {
+                // Blink!
+                currentVRM.expressionManager.setValue('blink', 1);
+                setTimeout(() => {
+                    if (currentVRM?.expressionManager) {
+                        currentVRM.expressionManager.setValue('blink', 0);
+                    }
+                }, 150);
+                blinkTimer = 0;
+                nextBlinkTime = 3 + Math.random() * 4;  // 3-7 segundos
+            }
+        }
+
+        // === VRM: Lip-sync ===
+        function updateLipSync() {
+            if (!currentVRM?.expressionManager) return;
+
+            // Si está hablando pero no recibe frames de audio, simular
+            if (isSpeaking && smoothedMouthOpen < 0.05) {
+                // Generar onda sinusoidal para simular movimiento de boca
+                const t = performance.now() / 1000;
+                const simulated = (Math.sin(t * 12) + 1) / 2 * 0.6 +
+                    (Math.sin(t * 7) + 1) / 2 * 0.3;
+                smoothedMouthOpen = simulated;
+            }
+
+            // Aplicar smoothedMouthOpen a expresión 'aa'
+            currentVRM.expressionManager.setValue('aa', smoothedMouthOpen);
+
+            // Si está hablando, reducir peso de otras expresiones
+            // (se maneja en setEmotion)
+        }
+
+        // === VRM: Aplicar postura según emoción ===
+        function applyPosturePreset(emotionName) {
+            if (!currentVRM?.humanoid || !currentConfig?.posturePresets) return;
+
+            const preset = currentConfig.posturePresets[emotionName] || currentConfig.posturePresets.neutral;
+            if (!preset) return;
+
+            try {
+                const DEG_TO_RAD = Math.PI / 180;
+
+                // Aplicar rotaciones a huesos (valores en grados → radianes)
+                const chest = currentVRM.humanoid.getNormalizedBoneNode('chest');
+                const head = currentVRM.humanoid.getNormalizedBoneNode('head');
+
+                if (chest && preset.chestPitch !== undefined) {
+                    chest.rotation.x = preset.chestPitch * DEG_TO_RAD;
+                }
+                if (chest && preset.chestYaw !== undefined) {
+                    chest.rotation.y = preset.chestYaw * DEG_TO_RAD;
+                }
+                if (head && preset.headPitch !== undefined) {
+                    head.rotation.x = preset.headPitch * DEG_TO_RAD;
+                }
+                if (head && preset.headYaw !== undefined) {
+                    head.rotation.y = preset.headYaw * DEG_TO_RAD;
+                }
+
+                console.log('[Posture] Aplicada:', emotionName, preset);
+            } catch (e) {
+                console.warn('[Posture] Error aplicando:', e);
+            }
+        }
+
+        // === VRM: Pose Inicial & Base Utils ===
+        let vrmBaseRotations = null;
+        const clamp01 = (v) => Math.min(1, Math.max(0, v));
+        // lerp removal
+        let smoothMouseX = 0.5;
+        let smoothMouseY = 0.5;
+
+        function applyRelaxedPose(vrm) {
+            if (!vrm.humanoid) return;
+            const DEG_TO_RAD = Math.PI / 180;
+
+            // Brazos abajo
+            const leftArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+            const rightArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+            if (leftArm) leftArm.rotation.z = 80 * DEG_TO_RAD;
+            if (rightArm) rightArm.rotation.z = -80 * DEG_TO_RAD;
+
+            // Antebrazos flexionados
+            const leftLowArm = vrm.humanoid.getNormalizedBoneNode('leftLowerArm');
+            const rightLowArm = vrm.humanoid.getNormalizedBoneNode('rightLowerArm');
+            if (leftLowArm) leftLowArm.rotation.z = 10 * DEG_TO_RAD;
+            if (rightLowArm) rightLowArm.rotation.z = -10 * DEG_TO_RAD;
+
+            // === FIX DE ROTACIÓN ===
+            // 1. Configurar orden de rotación a YXZ para Head/Neck/Spine
+            const head = vrm.humanoid.getNormalizedBoneNode('head');
+            const neck = vrm.humanoid.getNormalizedBoneNode('neck');
+            const spine = vrm.humanoid.getNormalizedBoneNode('spine');
+
+            if (head) head.rotation.order = 'YXZ';
+            if (neck) neck.rotation.order = 'YXZ';
+            if (spine) spine.rotation.order = 'YXZ';
+
+            // 2. Guardar rotaciones base (Quaternions)
+            vrmBaseRotations = {
+                head: head ? head.quaternion.clone() : new THREE.Quaternion(),
+                neck: neck ? neck.quaternion.clone() : new THREE.Quaternion(),
+                spine: spine ? spine.quaternion.clone() : new THREE.Quaternion()
+            };
+
+            console.log('[VRM] Pose relajada aplicada y rotaciones base guardadas');
+        }
+
+        // Guardar el estado completo de todos los huesos (quaternion + posicion)
+        // Se llama UNA vez despues de init + applyRelaxedPose
+        function saveVRMRestPose(vrm) {
+            if (!vrm?.humanoid) return;
+            vrmRestPose = {};
+            const allBones = [
+                'hips', 'spine', 'chest', 'upperChest', 'neck', 'head',
+                'leftShoulder', 'leftUpperArm', 'leftLowerArm', 'leftHand',
+                'rightShoulder', 'rightUpperArm', 'rightLowerArm', 'rightHand',
+                'leftUpperLeg', 'leftLowerLeg', 'leftFoot', 'leftToes',
+                'rightUpperLeg', 'rightLowerLeg', 'rightFoot', 'rightToes'
+            ];
+            allBones.forEach(name => {
+                const bone = vrm.humanoid.getNormalizedBoneNode(name);
+                if (bone) {
+                    vrmRestPose[name] = {
+                        quaternion: bone.quaternion.clone(),
+                        position: bone.position.clone()
+                    };
+                }
+            });
+            console.log('[VRM] Rest pose guardada:', Object.keys(vrmRestPose).length, 'huesos');
+        }
+
+        // Restaurar el estado exacto de todos los huesos al estado inicial
+        function restoreVRMRestPose(vrm) {
+            if (!vrm?.humanoid || !vrmRestPose) return;
+            for (const name in vrmRestPose) {
+                const bone = vrm.humanoid.getNormalizedBoneNode(name);
+                if (bone) {
+                    bone.quaternion.copy(vrmRestPose[name].quaternion);
+                    bone.position.copy(vrmRestPose[name].position);
+                }
+            }
+            // Recalcular base rotations para sistemas de mirada/idle
+            const head = vrm.humanoid.getNormalizedBoneNode('head');
+            const neck = vrm.humanoid.getNormalizedBoneNode('neck');
+            const spine = vrm.humanoid.getNormalizedBoneNode('spine');
+            vrmBaseRotations = {
+                head: head ? head.quaternion.clone() : new THREE.Quaternion(),
+                neck: neck ? neck.quaternion.clone() : new THREE.Quaternion(),
+                spine: spine ? spine.quaternion.clone() : new THREE.Quaternion()
+            };
+            console.log('[VRM] Rest pose restaurada');
+        }
+
+        // === VRM: Idle Animation (respiración y balanceo sutil) ===
+        let idleTimer = 0;
+        function updateIdleAnimation(delta) {
+            if (!currentVRM || !currentVRM.humanoid || !vrmBaseRotations) return;
+
+            idleTimer += delta;
+
+            // Respiración: movimiento sutil del pecho
+            const breathAmount = Math.sin(idleTimer * 1.2) * 0.008;
+            const chest = currentVRM.humanoid.getNormalizedBoneNode('chest');
+            if (chest) {
+                // Aplicar sobre la rotación base del chest
+                const baseChestQ = vrmBaseRotations.spine; // Usamos spine como referencia
+                const breathQ = new THREE.Quaternion()
+                    .setFromEuler(new THREE.Euler(breathAmount, 0, 0, 'YXZ'));
+                // No modificar directamente el chest aquí porque 
+                // updateVRMGaze ya maneja spine/neck/head
+            }
+
+            // Balanceo corporal muy sutil
+            const swayAmount = Math.sin(idleTimer * 0.4) * 0.005;
+            const spine = currentVRM.humanoid.getNormalizedBoneNode('spine');
+            if (spine && vrmBaseRotations.spine) {
+                // Añadir sway al spine (se suma al movimiento del look)
+                const currentQ = spine.quaternion.clone();
+                const swayQ = new THREE.Quaternion()
+                    .setFromEuler(new THREE.Euler(0, swayAmount, swayAmount * 0.5, 'YXZ'));
+                spine.quaternion.multiply(swayQ);
+            }
+        }
+
+        // === VRM: Actualizar LookAt (ojos/cabeza) ===
+        function updateVRMGaze() {
+            if (!currentVRM || !currentVRM.humanoid || !vrmBaseRotations) return;
+
+            // === Smoothing del input ===
+            const LERP_FACTOR = 0.1;
+            smoothMouseX = lerp(smoothMouseX, clamp01(targetMouseX), LERP_FACTOR);
+            smoothMouseY = lerp(smoothMouseY, clamp01(targetMouseY), LERP_FACTOR);
+
+            // 1. Actualizar target de ojos (existente) con valores suavizados
+            if (currentVRM.lookAt && currentVRM.lookAt.target) {
+                const lookAtTarget = currentVRM.lookAt.target;
+                lookAtTarget.position.set(
+                    (smoothMouseX - 0.5) * 5,
+                    (0.5 - smoothMouseY) * 5 + 1.25,
+                    0
+                );
+            }
+
+            // === Rotación con Quaternions (Offset desde Base) ===
+            // Limites en radianes (reducidos para evitar "cuello roto")
+            const MAX_YAW = 35 * (Math.PI / 180);   // Izquierda/Derecha
+            const MAX_PITCH = 25 * (Math.PI / 180); // Arriba/Abajo
+
+            // Yaw positivo = girar a la derecha cuando mouse va a la derecha
+            const yaw = (smoothMouseX - 0.5) * 2 * MAX_YAW;
+            // Pitch negativo = mirar arriba cuando mouse va arriba
+            const pitch = (0.5 - smoothMouseY) * 2 * MAX_PITCH;
+
+            // Crear Quaternions de rotación delta para cada hueso
+            // Usamos factores diferentes para distribuir el movimiento
+            const IDENTITY = new THREE.Quaternion();
+
+            const head = currentVRM.humanoid.getNormalizedBoneNode('head');
+            const neck = currentVRM.humanoid.getNormalizedBoneNode('neck');
+            const spine = currentVRM.humanoid.getNormalizedBoneNode('spine');
+
+            // Aplicar rotaciones proporcionales a cada hueso
+            if (spine) {
+                const spineYaw = yaw * 0.1;
+                const spinePitch = pitch * 0.05;
+                const qSpine = new THREE.Quaternion()
+                    .setFromEuler(new THREE.Euler(spinePitch, spineYaw, 0, 'YXZ'));
+                spine.quaternion.copy(vrmBaseRotations.spine).multiply(qSpine);
+            }
+            if (neck) {
+                const neckYaw = yaw * 0.4;
+                const neckPitch = pitch * 0.3;
+                const qNeck = new THREE.Quaternion()
+                    .setFromEuler(new THREE.Euler(neckPitch, neckYaw, 0, 'YXZ'));
+                neck.quaternion.copy(vrmBaseRotations.neck).multiply(qNeck);
+            }
+            if (head) {
+                const headYaw = yaw * 0.5;
+                const headPitch = pitch * 0.65;
+                const qHead = new THREE.Quaternion()
+                    .setFromEuler(new THREE.Euler(headPitch, headYaw, 0, 'YXZ'));
+                head.quaternion.copy(vrmBaseRotations.head).multiply(qHead);
+            }
+        }
+        // === FUNCIONES DE ANIMACION FBX ===
+
+        // Eliminar tracks de posicion (root motion) de un clip para hacerlo in-place
+        function removePositionTracks(clip) {
+            if (!clip) return clip;
+            clip.tracks = clip.tracks.filter(track => !track.name.endsWith('.position'));
+            return clip;
+        }
+
+        // Cargar y retarguetear animaciones FBX para uso con VRM
+        async function loadRetargetedAnimations(vrm) {
+            try {
+                const fbxLoader = new FBXLoader();
+
+                // Hello (saludo/despedida)
+                const helloFBX = await fbxLoader.loadAsync('./assets/animations/Hello.fbx');
+                animationClips.hello = removePositionTracks(retargetAnimation(helloFBX, vrm));
+                console.log('[Animaciones] Clip hello cargado:', !!animationClips.hello);
+
+                // Using Tablet
+                const tabletFBX = await fbxLoader.loadAsync('./assets/animations/Using Tablet.fbx');
+                animationClips.tablet = removePositionTracks(retargetAnimation(tabletFBX, vrm));
+                console.log('[Animaciones] Clip tablet cargado:', !!animationClips.tablet);
+
+                console.log('[Animaciones] Todos los clips cargados:', Object.keys(animationClips));
+            } catch (error) {
+                console.error('[Animaciones] Error cargando FBX:', error);
+            }
+        }
+
+        // Cargar modelo 3D de la tablet
+        async function loadTabletModel() {
+            try {
+                const gltfLoader = new GLTFLoader();
+                const gltf = await gltfLoader.loadAsync('./assets/items/low_poly_sci-fi_tablet.glb');
+                tabletModel = gltf.scene;
+                tabletModel.scale.setScalar(0.08);
+                tabletModel.visible = false;
+                // No agregar a la escena aun, se adjunta al bone cuando se usa
+                console.log('[Animaciones] Modelo tablet cargado');
+            } catch (error) {
+                console.error('[Animaciones] Error cargando tablet GLB:', error);
+            }
+        }
+
+        // Reproducir una animacion retargueteada
+        function playAnimation(clipName, options = {}) {
+            if (!currentVRM || !animationClips[clipName]) {
+                console.warn('[Animaciones] No se puede reproducir:', clipName);
+                return;
+            }
+
+            const {
+                loop = false,
+                speed = 1.0,
+                onComplete = null,
+                returnToIdle = true
+            } = options;
+
+            // Destruir mixer anterior para liberar bindings sobre los huesos
+            if (animMixer) {
+                animMixer.stopAllAction();
+                animMixer.uncacheRoot(currentVRM.scene);
+                animMixer = null;
+            }
+
+            // Crear mixer nuevo limpio
+            animMixer = new THREE.AnimationMixer(currentVRM.scene);
+
+            const action = animMixer.clipAction(animationClips[clipName]);
+            action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce);
+            action.timeScale = speed;
+            action.clampWhenFinished = true;
+            action.reset().play();
+
+            isPlayingClipAnimation = true;
+            motionPlaying = true;
+            console.log('[Animaciones] Reproduciendo:', clipName, 'loop:', loop, 'speed:', speed);
+
+            // Callback al terminar (solo si no es loop)
+            if (!loop) {
+                const onFinished = () => {
+                    animMixer.removeEventListener('finished', onFinished);
+
+                    // Liberar control del mixer sobre los huesos
+                    animMixer.stopAllAction();
+                    animMixer.uncacheRoot(currentVRM.scene);
+                    animMixer = null;
+
+                    isPlayingClipAnimation = false;
+                    motionPlaying = false;
+
+                    // Restaurar pose al estado inicial exacto
+                    if (returnToIdle && currentVRM) {
+                        restoreVRMRestPose(currentVRM);
+                    }
+                    if (onComplete) onComplete();
+                    console.log('[Animaciones] Clip finalizado:', clipName);
+                };
+                animMixer.addEventListener('finished', onFinished);
+            }
+        }
+
+        // Detener animacion activa y volver a idle
+        function stopAnimation() {
+            // Destruir mixer completamente para liberar bindings
+            if (animMixer) {
+                animMixer.stopAllAction();
+                if (currentVRM) {
+                    animMixer.uncacheRoot(currentVRM.scene);
+                }
+                animMixer = null;
+            }
+            isPlayingClipAnimation = false;
+            motionPlaying = false;
+
+            // Restaurar todos los huesos al estado inicial
+            if (currentVRM) {
+                restoreVRMRestPose(currentVRM);
+            }
+
+            // Despegar tablet del bone y ocultar
+            if (tabletModel) {
+                if (tabletModel.parent && tabletModel.parent !== scene) {
+                    tabletModel.parent.remove(tabletModel);
+                    scene.add(tabletModel);
+                }
+                tabletModel.visible = false;
+            }
+            console.log('[Animaciones] Animacion detenida, volviendo a idle');
+        }
+
+        // Iniciar animacion de tablet (adjuntar modelo a la mano)
+        function startTabletAnimation() {
+            if (tabletModel && currentVRM?.humanoid) {
+                const leftHand = currentVRM.humanoid.getNormalizedBoneNode('leftHand');
+                if (leftHand) {
+                    leftHand.add(tabletModel);
+                    tabletModel.visible = true;
+                    tabletModel.position.set(0.02, 0.06, 0.03);
+                    tabletModel.rotation.set(
+                        -Math.PI / 4,   // Inclinacion hacia Yui
+                        Math.PI / 6,    // Giro para que la pantalla mire a su cara
+                        0
+                    );
+                }
+            }
+
+            playAnimation('tablet', {
+                loop: true,
+                onComplete: null
+            });
+        }
+
+        // === MAIN ANIMATION LOOP ===
         function animationLoop() {
-            updateEyeTracking();
             requestAnimationFrame(animationLoop);
+
+            const delta = clock.getDelta();
+
+            // Animaciones por clip (FBX retargueteadas)
+            if (animMixer && isPlayingClipAnimation) {
+                animMixer.update(delta);
+            }
+
+            // Animaciones procedurales (solo si no hay clip activo)
+            if (!isPlayingClipAnimation) {
+                updateVRMGaze();
+                updateIdleAnimation(delta);
+            }
+
+            // Siempre activos independientemente del modo
+            updateBlink(delta);
+            updateLipSync();
+
+            // Update VRM internals (SpringBones, etc)
+            if (currentVRM) {
+                currentVRM.update(delta);
+            }
+
+            // Render
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
         }
 
         // Sistema de subtítulos con typewriter effect
@@ -522,6 +1049,12 @@
                     else if (message.type === 'tts_start') {
                         // TTS INICIA - mostrar subtítulo sincronizado con audio
                         const text = message.data?.text || '';
+
+                        // Lip-sync: guardar utteranceId y marcar como hablando
+                        currentUtteranceId = message.data?.utteranceId || null;
+                        isSpeaking = true;
+                        smoothedMouthOpen = 0;
+
                         if (text) {
                             console.log('[Subtítulos] TTS iniciando, mostrando:', text);
 
@@ -534,7 +1067,7 @@
                             showSubtitle(text, true);  // TRUE = es de Yui, fondo morado
                             pendingYuiResponse = null; // Limpiar pendiente
 
-                            // Duración proporcional: min 5s, +150ms por carácter (aumentado para leer cómodamente)
+                            // Duración proporcional: min 5s, +150ms por carácter
                             const duration = Math.max(5000, text.length * 150);
                             console.log(`[Subtítulos] Duración calculada: ${duration}ms para ${text.length} caracteres`);
 
@@ -545,30 +1078,44 @@
                         }
                     }
                     else if (message.type === 'tts_complete') {
-                        // TTS completó - ya se ocultó por timeout, no hacer nada
+                        // TTS completó - resetear lip-sync
                         console.log('[Subtítulos] TTS completado');
+                        if (message.data?.utteranceId === currentUtteranceId) {
+                            isSpeaking = false;
+                            smoothedMouthOpen = 0;
+                            currentUtteranceId = null;
+                        }
                     }
                     else if (message.type === 'set_expression') {
-                        // Cambiar expresion del modelo Live2D
+                        // Cambiar expresion del modelo VRM
                         const expressionName = message.data?.name || '';
-                        if (currentModel && expressionName) {
+                        if (currentVRM?.expressionManager && expressionName) {
                             try {
-                                const expManager = currentModel.internalModel?.motionManager?.expressionManager;
-                                if (expManager) {
-                                    // Limpiar expresiones acumuladas primero
-                                    expManager.resetExpression?.();
+                                // Resetear expresiones primero
+                                ['happy', 'sad', 'angry', 'surprised', 'neutral'].forEach(exp => {
+                                    currentVRM.expressionManager.setValue(exp, 0);
+                                });
 
-                                    // Aplicar nueva expresion si no es neutral
-                                    if (expressionName !== 'neutral') {
-                                        expManager.setExpression(expressionName);
-                                        console.log('[Expresion] Aplicada:', expressionName);
-                                    } else {
-                                        console.log('[Expresion] Reset a neutral');
-                                    }
+                                // Aplicar nueva expresion si no es neutral
+                                if (expressionName !== 'neutral') {
+                                    const weight = isSpeaking ? 0.3 : 0.7;
+                                    currentVRM.expressionManager.setValue(expressionName, weight);
+                                    console.log('[Expresion] VRM aplicada:', expressionName, 'peso:', weight);
+                                } else {
+                                    console.log('[Expresion] VRM reset a neutral');
                                 }
+
+                                // Aplicar postura corporal
+                                applyPosturePreset(expressionName);
                             } catch (e) {
-                                console.error('[Expresion] Error aplicando:', e);
+                                console.error('[Expresion] Error aplicando VRM:', e);
                             }
+                        }
+                    }
+                    else if (message.type === 'lipsync_frame') {
+                        // Lip-sync desde TTS microservicio
+                        if (message.utteranceId === currentUtteranceId) {
+                            smoothedMouthOpen += (message.mouthOpen - smoothedMouthOpen) * LIP_LERP_SPEED;
                         }
                     }
                 } catch (e) {
@@ -595,19 +1142,13 @@
             subtitleElement = document.getElementById('subtitle-text');
 
             // Conectar WebSocket para subtítulos con delay inicial
-            // (esperar a que backend esté completamente iniciado)
             console.log('[Subtítulos] Esperando 2s antes de conectar WebSocket...');
             setTimeout(() => {
                 connectSubtitleWebSocket();
             }, 2000);
 
-            if (typeof PIXI === 'undefined' || typeof PIXI.live2d === 'undefined') {
-                showError('Error cargando librerias');
-                return;
-            }
-
             currentConfig = await loadConfig();
-            currentScale = currentConfig.scale || 0.15;
+            currentScale = currentConfig.scale || 1.0;
 
             // Cargar configuracion de subtitulos guardada
             if (currentConfig.subtitles) {
@@ -620,7 +1161,6 @@
                 if (currentConfig.subtitles.maxWidth) {
                     subtitleConfig.maxWidth = currentConfig.subtitles.maxWidth;
                 }
-                // Aplicar estilos de subtitulos guardados
                 const subtitleContainer = document.getElementById('subtitle-container');
                 subtitleContainer.style.top = subtitleConfig.yPosition + '%';
                 subtitleElement.style.fontSize = subtitleConfig.fontSize + 'px';
@@ -628,87 +1168,218 @@
                 console.log('[Subtitulos] Configuracion cargada:', subtitleConfig);
             }
 
-            const app = new PIXI.Application({
-                view: canvas,
-                width: 400,
-                height: 500,
-                backgroundAlpha: 0,
-                antialias: true,
-                resolution: window.devicePixelRatio || 1,
-                autoDensity: true
-            });
+            // === THREE.JS SETUP ===
+            const width = 400;
+            const height = 500;
+            canvasRect = { width, height };
 
-            canvasRect = { width: 400, height: 500 };
+            // Crear renderer con transparencia
+            renderer = new THREE.WebGLRenderer({
+                canvas: canvas,
+                alpha: true,
+                antialias: true
+            });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+            // Crear escena
+            scene = new THREE.Scene();
+
+            // Crear cámara ortográfica para aspecto 2D
+            const aspect = width / height;
+            camera = new THREE.OrthographicCamera(
+                -aspect, aspect,  // left, right
+                1, -1,            // top, bottom
+                0.1, 20           // near, far
+            );
+            camera.position.set(0, 1, 5);
+            camera.lookAt(0, 1, 0);
+
+            // Luz ambiental base
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            // Luz direccional principal (necesaria para MToon shader)
+            directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(0, 1, 1); // Desde arriba-frente
+            scene.add(directionalLight);
+
+            // Segunda luz direccional (relleno desde el lado)
+            fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            fillLight.position.set(-1, 0.5, 0.5);
+            scene.add(fillLight);
+
+            // Cargar brillo guardado (ajusta todas las luces)
+            if (currentConfig.brightness !== undefined) {
+                const b = currentConfig.brightness;
+                ambientLight.intensity = 0.6 * b;
+                directionalLight.intensity = 1.0 * b;
+                fillLight.intensity = 0.5 * b;
+            }
 
             try {
-                PIXI.live2d.Live2DModel.registerTicker(PIXI.Ticker);
-                currentModel = await PIXI.live2d.Live2DModel.from(currentConfig.modelPath);
+                // === CARGAR VRM ===
+                const loader = new GLTFLoader();
+
+                // Registrar plugin con nuestro loader MToon seguro
+                loader.register((parser) => {
+                    const mtoonPlugin = new SafeMToonMaterialLoaderPlugin(parser);
+                    return new VRMLoaderPlugin(parser, { mtoonMaterialPlugin: mtoonPlugin });
+                });
+
+                console.log('[VRM] Cargando modelo:', currentConfig.modelPath);
+                const gltf = await loader.loadAsync(currentConfig.modelPath);
+                const vrm = gltf.userData.vrm;
+
+                if (!vrm) {
+                    throw new Error('No se encontró VRM en el archivo');
+                }
+
+                // Rotar el modelo (VRM viene mirando hacia +Z)
+                VRMUtils.rotateVRM0(vrm);
+
+                currentVRM = vrm;
+                scene.add(vrm.scene);
+
+                // Log expresiones disponibles
+                if (vrm.expressionManager) {
+                    const presets = Object.keys(vrm.expressionManager.presetExpressionMap || {});
+                    const customs = Object.keys(vrm.expressionManager.customExpressionMap || {});
+                    console.log('[VRM] Expresiones disponibles:');
+                    console.log('  Presets:', presets);
+                    console.log('  Custom:', customs);
+                }
+
+                // Ajustar posición y escala
+                vrm.scene.scale.setScalar(currentScale);
+
+                if (currentConfig.position) {
+                    vrm.scene.position.set(currentConfig.position.x, currentConfig.position.y, 0);
+                    console.log('[VRM] Posición restaurada:', currentConfig.position);
+                }
+
+                // === LOOK AT SETUP ===
+                // Crear un objeto target para que el VRM lo mire
+                const lookAtTarget = new THREE.Object3D();
+                camera.add(lookAtTarget); // Lo vinculamos a la cámara o escena
+
+                if (vrm.lookAt) {
+                    vrm.lookAt.target = lookAtTarget;
+                    vrm.lookAt.autoUpdate = true;
+                }
+
+                // Aplicar pose inicial relajada
+                applyRelaxedPose(vrm);
+
+                // Guardar estado completo de huesos despues de la pose inicial
+                saveVRMRestPose(vrm);
+
+                // Cargar animaciones FBX retargueteadas y modelo de tablet
+                await loadRetargetedAnimations(vrm);
+                await loadTabletModel();
 
                 loadingMsg.style.display = 'none';
+                console.log('[VRM] Modelo cargado exitosamente');
 
-                currentModel.scale.set(currentScale);
-                currentModel.anchor.set(0.5, 0.5);
-                currentModel.x = app.screen.width / 2 + (currentConfig.position?.x || 0);
-                currentModel.y = app.screen.height / 2 + (currentConfig.position?.y || 0);
 
-                currentModel.interactive = true;
-                currentModel.cursor = 'pointer';
+                // Wheel para escala (Zoom) - Siempre activo o con Ctrl
+                window.addEventListener('wheel', (e) => {
+                    // Si shift está presionado, o estamos en modo config, permitimos zoom
+                    if (!e.ctrlKey && !configModeEnabled) return;
 
-                currentModel.on('pointerdown', () => {
-                    if (document.body.classList.contains('drag-mode')) return;
-                    const motions = currentConfig.motions || {};
-                    const motionKeys = Object.values(motions).filter(Boolean);
-                    if (motionKeys.length > 0) {
-                        const randomMotion = motionKeys[Math.floor(Math.random() * motionKeys.length)];
-                        currentModel.motion(randomMotion);
+                    e.preventDefault();
+                    // Zoom más suave
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                    currentScale = Math.max(0.1, Math.min(5.0, currentScale + delta));
+
+                    if (currentVRM) {
+                        currentVRM.scene.scale.setScalar(currentScale);
+                        // Ajustar posición para mantener el centro relativo si es necesario,
+                        // por ahora solo escala in-place.
+                    }
+                    console.log(`[Zoom] Nueva escala: ${currentScale.toFixed(2)}`);
+                    scheduleAutoSave();
+                }, { passive: false });
+
+                // Drag del Modelo (Pan) con Clic Derecho
+                let isPanning = false;
+                let panStartX = 0;
+                let panStartY = 0;
+                let modelStartPos = new THREE.Vector3();
+
+                window.addEventListener('mousedown', (e) => {
+                    // 2 = Click Derecho
+                    if (e.button === 2) {
+                        isPanning = true;
+                        panStartX = e.clientX;
+                        panStartY = e.clientY;
+                        if (currentVRM) {
+                            modelStartPos.copy(currentVRM.scene.position);
+                        }
+                        e.preventDefault(); // Evitar menú contextual a veces
                     }
                 });
 
-                app.stage.addChild(currentModel);
+                window.addEventListener('mousemove', (e) => {
+                    if (isPanning && currentVRM) {
+                        // Calcular delta en pixeles y convertir a unidades de mundo (aprox)
+                        // Factor de conversión depende de la cámara y distancia
+                        const sensitivity = 0.0025 * (5 / camera.position.z); // Ajuste empírico
 
-                // Aplicar estado inicial de accesorios desde config
-                if (currentConfig.accessories) {
-                    setTimeout(() => {
-                        try {
-                            const coreModel = currentModel.internalModel.coreModel;
-                            if (currentConfig.accessories.hat) {
-                                coreModel.setParameterValueById('ParamCapOnOff', 1);
-                                console.log('[Init] Sombrero inicial: ON');
-                            }
-                            if (currentConfig.accessories.jacket) {
-                                coreModel.setParameterValueById('ParamJacketOnOff', 1);
-                                coreModel.setParameterValueById('ParamJacketChange', 1);
-                                console.log('[Init] Chaqueta abierta inicial: ON');
-                            }
-                        } catch (e) {
-                            console.error('[Init] Error aplicando accesorios iniciales:', e);
-                        }
-                    }, 500); // Pequeño delay para asegurar que el modelo esta listo
-                }
+                        const dx = (e.clientX - panStartX) * sensitivity * 2.5; // X normal
+                        const dy = (e.clientY - panStartY) * sensitivity * 2.5; // Y invertido
 
-                canvas.addEventListener('wheel', (e) => {
-                    if (!configModeEnabled) return; // Solo en modo config
-                    e.preventDefault();
-                    const delta = e.deltaY > 0 ? -0.01 : 0.01;
-                    currentScale = Math.max(0.05, Math.min(1.0, currentScale + delta));
-                    currentModel.scale.set(currentScale);
-                    scheduleAutoSave();
+                        currentVRM.scene.position.set(
+                            modelStartPos.x + dx,
+                            modelStartPos.y - dy, // ThreeJS Y es arriba
+                            modelStartPos.z
+                        );
+
+                        // Guardar config dinámicamente
+                        if (!currentConfig.position) currentConfig.position = {};
+                        currentConfig.position.x = currentVRM.scene.position.x;
+                        currentConfig.position.y = currentVRM.scene.position.y;
+                    }
                 });
 
-                // Drag mode
-                container.addEventListener('mousedown', (e) => {
+                window.addEventListener('mouseup', (e) => {
+                    if (isPanning) {
+                        isPanning = false;
+                        scheduleAutoSave();
+                        console.log('[Pan] Nueva posición:', currentVRM.scene.position);
+                    }
+                });
+
+                // Prevenir menú contextual del click derecho
+                window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+                // NOTA: No cerramos el try aquí, sigue para abajo...
+
+                // Drag de la ventana (movimiento del app)
+                // Usamos variables separadas para no confundir con Pan de VRM
+                // Drag de la ventana (movimiento del app)
+                let appDragStartX = 0;
+                let appDragStartY = 0;
+
+                // 1. Mousedown
+                document.addEventListener('mousedown', (e) => {
                     if (!document.body.classList.contains('drag-mode')) return;
                     isDragging = true;
-                    dragStartX = e.screenX;
-                    dragStartY = e.screenY;
+                    appDragStartX = e.screenX;
+                    appDragStartY = e.screenY;
                 });
 
+                // 2. Mousemove
                 document.addEventListener('mousemove', (e) => {
                     if (!isDragging) return;
-                    const deltaX = e.screenX - dragStartX;
-                    const deltaY = e.screenY - dragStartY;
-                    dragStartX = e.screenX;
-                    dragStartY = e.screenY;
+
+                    const deltaX = e.screenX - appDragStartX;
+                    const deltaY = e.screenY - appDragStartY;
+
+                    appDragStartX = e.screenX;
+                    appDragStartY = e.screenY;
+
                     const currentPos = { x: window.screenX, y: window.screenY };
                     window.electronAPI?.setWindowPosition(
                         currentPos.x + deltaX,
@@ -716,11 +1387,12 @@
                     );
                 });
 
+                // 3. Mouseup
                 document.addEventListener('mouseup', () => {
                     isDragging = false;
                 });
 
-                // Tracking global - recibir posicion y actualizar objetivo
+                // Mouse tracking global
                 window.electronAPI?.startMouseTracking();
                 window.electronAPI?.onMousePosition((pos) => {
                     const centerX = canvasRect.width / 2;
@@ -729,13 +1401,25 @@
                     targetY = (pos.y - centerY) / canvasRect.height;
                 });
 
-                // Iniciar loop de animacion suave
+                // Resetear clock para evitar delta acumulado durante carga
+                clock.getDelta();
+
+                // Iniciar loop de animacion
                 animationLoop();
 
+                // Saludo inicial (despues de que el loop esta corriendo)
+                setTimeout(() => {
+                    playAnimation('hello', {
+                        speed: 1.0,
+                        returnToIdle: true
+                    });
+                }, 200);
+
             } catch (error) {
-                showError('Error: ' + error.message);
+                console.error('[VRM] Error cargando modelo:', error);
+                showError('Error fatal cargando VRM:\n' + error.message);
             }
-        }
+        } // End init()
 
         function showError(message) {
             document.getElementById('loadingMsg').style.display = 'none';
@@ -763,115 +1447,81 @@
         window.electronAPI?.onMouseTracking((enabled) => {
             mouseTrackingEnabled = enabled;
             if (!enabled) {
-                targetX = 0;
-                targetY = 0;
+                // Reset target a posicion neutral
+                targetX = 0.5;
+                targetY = 0.5;
+                targetMouseX = 0.5;
+                targetMouseY = 0.5;
+                // Mouse tracking desactivado: Yui usa su tablet
+                startTabletAnimation();
+            } else {
+                // Mouse tracking reactivado: Yui guarda la tablet
+                stopAnimation();
             }
         });
 
-        // Expresiones
+        // Brillo (intensidad de todas las luces)
+        window.electronAPI?.onBrightness?.((value) => {
+            const b = value;
+            if (ambientLight) ambientLight.intensity = 0.6 * b;
+            if (directionalLight) directionalLight.intensity = 1.0 * b;
+            if (fillLight) fillLight.intensity = 0.5 * b;
+            console.log('[Brillo] Ajustado a:', value);
+        });
         window.electronAPI?.onExpression((name) => {
-            if (!currentModel) {
-                console.log('[Expression] Error: modelo no cargado');
+            if (!currentVRM?.expressionManager) {
+                console.log('[Expression] Error: VRM no cargado');
                 return;
             }
-            console.log('[Expression] Aplicando:', name || 'Normal (reset)');
+            console.log('[Expression] Aplicando:', name || 'neutral');
             try {
-                if (name === null || name === 'neutral') {
-                    // Resetear expresion - usar expressionManager para evitar expresion aleatoria
-                    const expressionManager = currentModel.internalModel?.motionManager?.expressionManager;
-                    if (expressionManager) {
-                        expressionManager.resetExpression?.();
-                    }
-                    console.log('[Expression] Reset exitoso');
+                // Primero resetear todas las expresiones
+                const expressions = ['happy', 'sad', 'angry', 'surprised', 'neutral'];
+                expressions.forEach(exp => {
+                    currentVRM.expressionManager.setValue(exp, 0);
+                });
+
+                // Aplicar nueva expresión
+                if (name && name !== 'neutral') {
+                    // Peso reducido si está hablando (lip-sync tiene prioridad)
+                    const weight = isSpeaking ? 0.3 : 0.7;
+                    currentVRM.expressionManager.setValue(name, weight);
+                    console.log('[Expression] Aplicada:', name, 'peso:', weight);
                 } else {
-                    currentModel.expression(name);
-                    console.log('[Expression] Aplicada:', name);
+                    console.log('[Expression] Reset a neutral');
                 }
+
+                // Aplicar postura corporal según emoción
+                applyPosturePreset(name || 'neutral');
             } catch (e) {
                 console.error('[Expression] Error:', e);
             }
         });
 
-        // Accesorios - manipular parametros directamente
-        window.electronAPI?.onAccessory((type, enabled) => {
-            if (!currentModel?.internalModel?.coreModel) {
-                console.log('[Accessory] Error: modelo no cargado');
-                return;
-            }
-            console.log('[Accessory] Toggle:', type, enabled);
-            try {
-                const coreModel = currentModel.internalModel.coreModel;
-                if (type === 'hat') {
-                    // ParamCapOnOff: 0 = sin sombrero, 1 = con sombrero
-                    coreModel.setParameterValueById('ParamCapOnOff', enabled ? 1 : 0);
-                    console.log('[Accessory] Sombrero:', enabled ? 'ON' : 'OFF');
-                } else if (type === 'jacket') {
-                    // ParamJacketOnOff y ParamJacketChange trabajan juntos
-                    // enabled = ambos en 1 (chaqueta abierta visible)
-                    // disabled = ambos en 0 (atuendo original/por defecto)
-                    coreModel.setParameterValueById('ParamJacketOnOff', enabled ? 1 : 0);
-                    coreModel.setParameterValueById('ParamJacketChange', enabled ? 1 : 0);
-                    console.log('[Accessory] Chaqueta abierta:', enabled ? 'SI' : 'NO (atuendo original)');
-                }
-            } catch (e) {
-                console.error('[Accessory] Error:', e);
-            }
-        });
 
-        // Animaciones/Motions - pausar tracking durante la animacion
-        window.electronAPI?.onMotion((name) => {
-            if (!currentModel) {
-                console.log('[Motion] Error: modelo no cargado');
-                return;
-            }
-            console.log('[Motion] Iniciando:', name);
-            motionPlaying = true;
-
-            const motionNames = ['Scene1', 'haoqi', 'keshui', 'linghun', 'qizi', 'yaotou', 'zhentou'];
-            const index = motionNames.indexOf(name);
-            console.log('[Motion] Indice encontrado:', index);
-
-            try {
-                if (index >= 0) {
-                    const result = currentModel.motion('', index);
-                    console.log('[Motion] Resultado:', result);
-                } else {
-                    console.log('[Motion] Intentando por nombre directo...');
-                    const result = currentModel.motion(name);
-                    console.log('[Motion] Resultado:', result);
-                }
-            } catch (e) {
-                console.error('[Motion] Error:', e);
-            }
-
-            setTimeout(() => {
-                motionPlaying = false;
-                console.log('[Motion] Tracking reactivado');
-            }, 5000);
-        });
-
-        // Resetear todo (expresiones y animaciones)
+        // Resetear expresiones VRM
         window.electronAPI?.onMotionReset(() => {
-            if (!currentModel) return;
-            console.log('[Reset] Reseteando a estado inicial...');
+            if (!currentVRM?.expressionManager) return;
+            console.log('[Reset] Reseteando VRM a estado neutral...');
             try {
-                // Detener todas las animaciones
-                currentModel.internalModel?.motionManager?.stopAllMotions();
-                console.log('[Reset] Motions detenidas');
-
-                // Resetear expresion a la default (sin accesorios)
-                currentModel.expression();
-                console.log('[Reset] Expresion reseteada');
-
-                // Tambien resetear expression manager si existe
-                if (currentModel.internalModel?.motionManager?.expressionManager) {
-                    currentModel.internalModel.motionManager.expressionManager.resetExpression?.();
-                }
-
+                // Resetear todas las expresiones
+                const expressions = ['happy', 'sad', 'angry', 'surprised', 'neutral', 'aa', 'blink'];
+                expressions.forEach(exp => {
+                    currentVRM.expressionManager.setValue(exp, 0);
+                });
                 console.log('[Reset] Completado');
             } catch (e) {
                 console.error('[Reset] Error:', e);
             }
+        });
+        // Animacion de despedida al cerrar la app
+        window.electronAPI?.onAppClosing?.(() => {
+            console.log('[Animaciones] App cerrando - reproduciendo despedida');
+            stopAnimation();
+            playAnimation('hello', {
+                speed: 1.3,
+                returnToIdle: false
+            });
         });
 
         window.addEventListener('load', init);

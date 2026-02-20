@@ -1,6 +1,6 @@
 # 🎤 Yui AI Assistant
 
-**Yui** es una asistente de voz con inteligencia artificial creada por **EDAKZIN**. Combina reconocimiento de voz, generacion de lenguaje natural y clonacion de voz para ofrecer una experiencia conversacional unica con subtitulos sincronizados y expresiones faciales dinamicas.
+**Yui** es una asistente de voz con inteligencia artificial creada por **EDAKZIN**. Combina reconocimiento de voz, generacion de lenguaje natural y clonacion de voz para ofrecer una experiencia conversacional unica con subtitulos sincronizados, modelo 3D VRM animado y expresiones faciales dinamicas.
 
 ## Caracteristicas
 
@@ -11,7 +11,8 @@
 - **Comandos de voz**: Abrir apps, hora, fecha, busqueda web
 - **Busqueda web**: Brave Search API con contexto de fecha
 - **Personalidad unica**: Amigable por defecto, sarcastica si la provocan
-- **Desktop Pet**: Mascota Live2D con Electron + Panel de Control
+- **Desktop Pet**: Modelo 3D VRM con Electron + Three.js + Panel de Control
+- **Animaciones FBX**: Animaciones de Mixamo retargueteadas para VRM
 - **Expresiones faciales**: Detecta emociones y cambia expresiones automaticamente
 - **Eventos especiales**: Felicita en Navidad, Ano Nuevo, cumpleanos
 - **Subtitulos sincronizados**: Aparecen exactamente cuando el audio empieza
@@ -42,7 +43,9 @@ Usuario → faster-whisper → Comandos/LLM → Emociones → XTTS v2 → Audio
 
 | Asset | Ubicación | Instrucciones |
 |-------|-----------|---------------|
-| Modelo Live2D | `desktop-pet/models/` | Ver [README](desktop-pet/models/README.md) |
+| Modelo VRM | `desktop-pet/models/` | Ver [README](desktop-pet/models/README.md) |
+| Animaciones FBX | `desktop-pet/assets/animations/` | Ver [README](desktop-pet/assets/animations/README.md) |
+| Items 3D | `desktop-pet/assets/items/` | Ver [README](desktop-pet/assets/items/README.md) |
 | Muestras de voz | `voice_samples/` | Ver [README](voice_samples/README.md) |
 
 ## 🔧 Instalacion
@@ -121,7 +124,7 @@ cd ..
 Este script inicia automáticamente:
 1. **Backend Principal** - LLM, STT, WebSocket (puerto 58765)
 2. **TTS Microservice** se inicia automáticamente cuando Yui habla (puerto 51001)
-3. **Desktop Pet** - Mascota Live2D con Electron
+3. **Desktop Pet** - Modelo 3D VRM con Electron + Three.js
 
 ### Espera ~2-3 minutos la primera vez (carga de modelos)
 
@@ -132,7 +135,8 @@ Este script inicia automáticamente:
 ## Interfaz
 
 El sistema incluye:
-- **Desktop Pet**: Mascota Live2D animada que sigue el cursor
+- **Desktop Pet**: Modelo 3D VRM animado que sigue el cursor
+- **Animaciones FBX**: Animaciones de Mixamo retargueteadas (saludo, tablet, etc.)
 - **Panel de Control**: Accesible desde la bandeja del sistema
   - Estado visual (activa, escuchando, procesando)
   - Transcripcion en vivo
@@ -144,6 +148,7 @@ El sistema incluye:
   - Ajustar escala del modelo
   - Ajustar subtitulos (posicion, tamano)
   - Arrastrar ventana
+  - Ajustar brillo
   - Modo atravesar (passthrough)
   - Reiniciar aplicacion
 
@@ -207,9 +212,12 @@ yui-asistente/
 ├── desktop-pet/              # Aplicación Electron
 │   ├── src/main.ts           # Proceso principal
 │   ├── src/control-panel.ts  # Panel de control
-│   ├── index.html            # Ventana Live2D
+│   ├── index.html            # Ventana VRM 3D (Three.js)
 │   ├── control-panel.html    # Panel de control
-│   └── models/               # Modelos VRM
+│   ├── models/               # Modelos VRM (.vrm)
+│   └── assets/               # Assets 3D
+│       ├── animations/       # Animaciones FBX (Mixamo)
+│       └── items/            # Items 3D (props)
 ├── voice_samples/            # Muestras de voz para clonación
 ├── logs/
 │   ├── yui.log               # Log de conversaciones
@@ -260,7 +268,8 @@ Edita `config.json` para ajustar:
 | Comandos | AppOpener |
 | Backend | PyTorch 2.6 + CUDA 12.4 + llama-cpp-python (CUDA 12.1) |
 | TTS Service | PyTorch 2.2.2 + DeepSpeed 0.13.1 (proceso separado) |
-| GUI | Electron + Live2D (pixi-live2d-display) |
+| GUI | Electron + Three.js + @pixiv/three-vrm |
+| Animaciones | Mixamo FBX + vrm-mixamo-retarget |
 
 ## 📊 Rendimiento
 
@@ -290,4 +299,4 @@ Apps bloqueadas por seguridad: cmd, powershell, regedit, taskmgr, diskpart, y m�
 MIT License - Creado por **EDAKZIN** 🚀
 
 ---
-**Versión 6.2.0** - Última actualización: 2026-01-29
+**Versión 7.0.0** - Última actualización: 2026-02-19

@@ -55,5 +55,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Accesorios (hat, jacket)
     onAccessory: (callback) => {
         ipcRenderer.on('accessory', (event, type, enabled) => callback(type, enabled));
+    },
+    // Brillo (recibir desde pet window)
+    onBrightness: (callback) => {
+        ipcRenderer.on('brightness', (event, value) => callback(value));
+    },
+    // Brillo inicial (desde config guardado)
+    onInitBrightness: (callback) => {
+        ipcRenderer.on('init-brightness', (event, value) => callback(value));
+    },
+    // Enviar brillo desde control panel
+    setBrightness: (value) => {
+        ipcRenderer.send('set-brightness', value);
+    },
+    // Notificacion de cierre de app (para animacion de despedida)
+    onAppClosing: (callback) => {
+        ipcRenderer.on('app-closing', () => callback());
     }
 });

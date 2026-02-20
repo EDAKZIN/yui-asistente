@@ -870,3 +870,22 @@ input:checked+.slider:before {
     color: var(--accent-cyan);
     font-weight: 500;
 }
+
+/* Brightness control */
+.brightness-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.brightness-control input[type="range"] {
+    width: 100px;
+}
+
+.brightness-control span {
+    font-size: 11px;
+    color: var(--accent-cyan);
+    font-weight: 500;
+    min-width: 40px;
+    text-align: right;
+}

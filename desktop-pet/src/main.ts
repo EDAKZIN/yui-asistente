@@ -3,7 +3,7 @@
  * MUTE GLOBAL: main.ts → WebSocket directo al backend
  */
 
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } from 'electron';
+import { app, BrowserWindow, Tray, Menu, MenuItem, ipcMain, screen, nativeImage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -119,11 +119,13 @@ function createWindow(): void {
         webPreferences: {
             preload: path.join(__dirname, '..', 'src', 'preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            devTools: true
         }
     });
 
-    mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../index.html'));
+
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
 
     if (isMac) {
@@ -132,6 +134,13 @@ function createWindow(): void {
 
     mainWindow.on('closed', () => {
         mainWindow = null;
+    });
+
+    // Re-establecer alwaysOnTop si pierde el nivel (bug de Windows/Electron)
+    mainWindow.on('blur', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        }
     });
 
     createTray();
@@ -161,8 +170,16 @@ function createControlWindow(): void {
         }
     });
 
-    controlWindow.loadFile(path.join(__dirname, '..', 'control-panel.html'));
+    controlWindow.loadFile(path.join(__dirname, '../control-panel.html'));
     controlWindow.setMenuBarVisibility(false);
+
+    // Enviar brillo guardado cuando la ventana esté lista
+    controlWindow.webContents.on('did-finish-load', () => {
+        const config = loadConfig();
+        if (config.brightness !== undefined) {
+            controlWindow?.webContents.send('init-brightness', config.brightness);
+        }
+    });
 
     controlWindow.on('closed', () => {
         controlWindow = null;
@@ -208,52 +225,13 @@ function createTray(): void {
         },
         { type: 'separator' },
         {
-            label: 'Expresiones',
+            label: 'Expresiones (VRM)',
             submenu: [
                 { label: 'Normal', click: () => mainWindow?.webContents.send('expression', 'neutral') },
-                { label: 'Feliz', click: () => mainWindow?.webContents.send('expression', 'excited') },
+                { label: 'Feliz', click: () => mainWindow?.webContents.send('expression', 'happy') },
                 { label: 'Triste', click: () => mainWindow?.webContents.send('expression', 'sad') },
-                { label: 'Enojada', click: () => mainWindow?.webContents.send('expression', 'yanderee') },
-                { label: 'Sonrojada', click: () => mainWindow?.webContents.send('expression', 'blush') },
-                { label: 'Ojos Negros', click: () => mainWindow?.webContents.send('expression', 'blackiris') },
-                { label: 'Cara Rara', click: () => mainWindow?.webContents.send('expression', 'weirdface') }
-            ]
-        },
-        {
-            label: 'Accesorios',
-            submenu: [
-                {
-                    label: 'Sombrero',
-                    type: 'checkbox',
-                    checked: config.accessories?.hat ?? false,
-                    click: (menuItem) => {
-                        mainWindow?.webContents.send('accessory', 'hat', menuItem.checked);
-                        // Guardar estado
-                        const currentConfig = loadConfig();
-                        if (!currentConfig.accessories) currentConfig.accessories = {};
-                        currentConfig.accessories.hat = menuItem.checked;
-                        saveConfig(currentConfig);
-                    }
-                },
-                {
-                    label: 'Chaqueta Abierta',
-                    type: 'checkbox',
-                    checked: config.accessories?.jacket ?? false,
-                    click: (menuItem) => {
-                        mainWindow?.webContents.send('accessory', 'jacket', menuItem.checked);
-                        // Guardar estado
-                        const currentConfig = loadConfig();
-                        if (!currentConfig.accessories) currentConfig.accessories = {};
-                        currentConfig.accessories.jacket = menuItem.checked;
-                        saveConfig(currentConfig);
-                    }
-                }
-            ]
-        },
-        {
-            label: 'Animaciones',
-            submenu: [
-                { label: 'Idle', click: () => mainWindow?.webContents.send('motion', 'idle') }
+                { label: 'Enojada', click: () => mainWindow?.webContents.send('expression', 'angry') },
+                { label: 'Sorprendida', click: () => mainWindow?.webContents.send('expression', 'surprised') }
             ]
         },
         { type: 'separator' },
@@ -340,6 +318,18 @@ ipcMain.on('set-ignore-mouse-events', (_event, ignore: boolean) => {
     } else {
         mainWindow?.setIgnoreMouseEvents(ignore, { forward: true });
     }
+});
+
+// Brightness control from control panel
+ipcMain.on('set-brightness', (_event, value: number) => {
+    // Forward to pet window
+    mainWindow?.webContents.send('brightness', value);
+
+    // Save to config
+    const config = loadConfig();
+    config.brightness = value;
+    saveConfig(config);
+    console.log('Brillo ajustado a:', value);
 });
 
 ipcMain.on('set-window-position', (_event, x: number, y: number) => {
@@ -459,7 +449,8 @@ ipcMain.on('stop-mouse-tracking', () => {
     }
 })();
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+    // await startPetServer(); // Removed
     createWindow();
 
     app.on('activate', () => {
@@ -469,7 +460,22 @@ app.whenReady().then(() => {
     });
 });
 
+// Notificar al frontend antes de cerrar (para animacion de despedida)
+let isQuitting = false;
+app.on('before-quit', (event) => {
+    if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
+        isQuitting = true;
+        event.preventDefault();
+        mainWindow.webContents.send('app-closing');
+        // Esperar a que la animacion de despedida termine
+        setTimeout(() => {
+            app.quit();
+        }, 3500);
+    }
+});
+
 app.on('window-all-closed', () => {
+    // petServer?.close(); // Removed
     if (!isMac) {
         app.quit();
     }
