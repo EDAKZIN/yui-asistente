@@ -32,4 +32,5 @@ async function loadMiItem() {
 }
 ```
 
-> **NOTA**: Ajusta la escala segun el tamano del modelo. Los modelos de Sketchfab suelen necesitar escalas entre 0.01 y 0.5.
+> [!TIP]
+> Ajusta la escala segun el tamano del modelo. Los modelos de Sketchfab suelen necesitar escalas entre 0.01 y 0.5.

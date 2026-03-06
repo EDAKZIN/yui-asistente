@@ -1,5 +1,8 @@
 # 🎤 Yui AI Assistant
 
+> [!WARNING]
+> Este es un proyecto personal hecho a mi medida. No esta diseñado para ser plug-and-play. Si quieres usarlo, vas a necesitar adaptar configuraciones, modelos, prompts y assets a tu propio entorno.
+
 **Yui** es una asistente de voz con inteligencia artificial creada por **EDAKZIN**. Combina reconocimiento de voz, generacion de lenguaje natural y clonacion de voz para ofrecer una experiencia conversacional unica con subtitulos sincronizados, modelo 3D VRM animado y expresiones faciales dinamicas.
 
 ## Caracteristicas
@@ -39,7 +42,8 @@ Usuario → faster-whisper → Comandos/LLM → Emociones → XTTS v2 → Audio
 
 ## 📦 Assets Requeridos
 
-> **IMPORTANTE**: Este proyecto requiere assets que debes proveer tú mismo por razones de licencia/copyright.
+> [!IMPORTANT]
+> Este proyecto requiere assets que debes proveer tú mismo por razones de licencia/copyright.
 
 | Asset | Ubicación | Instrucciones |
 |-------|-----------|---------------|
@@ -95,7 +99,8 @@ pip install -r requirements_tts.txt
 cd ..
 ```
 
-> **NOTA**: PyTorch 2.2.2+cu118 es compatible con DeepSpeed 0.13.1. El backend principal usa PyTorch 2.6+ (CUDA 12.4) sin conflictos gracias a la arquitectura de microservicios aislados.
+> [!NOTE]
+> PyTorch 2.2.2+cu118 es compatible con DeepSpeed 0.13.1. El backend principal usa PyTorch 2.6+ (CUDA 12.4) sin conflictos gracias a la arquitectura de microservicios aislados.
 
 ### Frontend (Electron)
 ```powershell
@@ -148,6 +153,7 @@ El sistema incluye:
   - Ajustar escala del modelo
   - Ajustar subtitulos (posicion, tamano)
   - Arrastrar ventana
+  - Ajustar items 3D (posicion, rotacion, escala de props)
   - Ajustar brillo
   - Modo atravesar (passthrough)
   - Reiniciar aplicacion
@@ -299,4 +305,4 @@ Apps bloqueadas por seguridad: cmd, powershell, regedit, taskmgr, diskpart, y m�
 MIT License - Creado por **EDAKZIN** 🚀
 
 ---
-**Versión 7.0.0** - Última actualización: 2026-02-19
+**Versión 7.1.0** - Última actualización: 2026-03-06

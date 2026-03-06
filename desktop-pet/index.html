@@ -264,6 +264,63 @@
             min-width: 60px;
             font-size: 11px;
         }
+
+        /* Controles de Items 3D */
+        #item-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #fff;
+            display: none;
+            z-index: 10000;
+            min-width: 160px;
+        }
+
+        #item-controls.show {
+            display: block;
+        }
+
+        #item-controls button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 3px 7px;
+            margin: 1px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        #item-controls button:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .item-control-row {
+            margin: 3px 0;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .item-control-label {
+            min-width: 50px;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .item-section-title {
+            font-size: 10px;
+            color: #88ccff;
+            margin-top: 6px;
+            margin-bottom: 2px;
+            border-bottom: 1px solid rgba(136, 204, 255, 0.3);
+            padding-bottom: 2px;
+        }
     </style>
 </head>
 
@@ -297,6 +354,49 @@
             </div>
         </div>
         <div class="subtitle-hint">Controles en pantalla</div>
+
+        <!-- Controles de Items 3D -->
+        <div id="item-controls">
+            <div style="font-size:11px; font-weight:bold; margin-bottom:4px;">Ajustar Tablet</div>
+            <div class="item-section-title">Posicion</div>
+            <div class="item-control-row">
+                <span class="item-control-label">X:</span>
+                <button onclick="adjustItemPos('x', -0.01)">&#9664;</button>
+                <button onclick="adjustItemPos('x', 0.01)">&#9654;</button>
+            </div>
+            <div class="item-control-row">
+                <span class="item-control-label">Y:</span>
+                <button onclick="adjustItemPos('y', 0.01)">&#9650;</button>
+                <button onclick="adjustItemPos('y', -0.01)">&#9660;</button>
+            </div>
+            <div class="item-control-row">
+                <span class="item-control-label">Z:</span>
+                <button onclick="adjustItemPos('z', -0.01)">&#9664;</button>
+                <button onclick="adjustItemPos('z', 0.01)">&#9654;</button>
+            </div>
+            <div class="item-section-title">Rotacion</div>
+            <div class="item-control-row">
+                <span class="item-control-label">X:</span>
+                <button onclick="adjustItemRot('x', -0.05)">&#9664;</button>
+                <button onclick="adjustItemRot('x', 0.05)">&#9654;</button>
+            </div>
+            <div class="item-control-row">
+                <span class="item-control-label">Y:</span>
+                <button onclick="adjustItemRot('y', -0.05)">&#9664;</button>
+                <button onclick="adjustItemRot('y', 0.05)">&#9654;</button>
+            </div>
+            <div class="item-control-row">
+                <span class="item-control-label">Z:</span>
+                <button onclick="adjustItemRot('z', -0.05)">&#9664;</button>
+                <button onclick="adjustItemRot('z', 0.05)">&#9654;</button>
+            </div>
+            <div class="item-section-title">Escala</div>
+            <div class="item-control-row">
+                <span class="item-control-label">Tamano:</span>
+                <button onclick="adjustItemScale(-0.1)">-</button>
+                <button onclick="adjustItemScale(0.1)">+</button>
+            </div>
+        </div>
     </div>
 
     <!-- Three.js + VRM (reemplaza PIXI + Live2D) -->
@@ -375,6 +475,7 @@
         let tabletModel = null;              // Modelo GLB de la tablet
         const animationClips = {};           // { 'hello': AnimationClip, 'tablet': AnimationClip }
         let vrmRestPose = null;              // Estado completo de huesos despues de la pose inicial
+        let itemConfigMode = false;          // Modo ajuste de items activo
 
         // Escuchar posición del mouse desde Main Process (global tracking)
         if (window.electronAPI) {
@@ -921,18 +1022,23 @@
         }
 
         // Iniciar animacion de tablet (adjuntar modelo a la mano)
+        // Lee posicion/rotacion/escala desde model-config.json (items.tablet)
         function startTabletAnimation() {
             if (tabletModel && currentVRM?.humanoid) {
                 const leftHand = currentVRM.humanoid.getNormalizedBoneNode('leftHand');
                 if (leftHand) {
                     leftHand.add(tabletModel);
                     tabletModel.visible = true;
-                    tabletModel.position.set(0.02, 0.06, 0.03);
-                    tabletModel.rotation.set(
-                        -Math.PI / 4,   // Inclinacion hacia Yui
-                        Math.PI / 6,    // Giro para que la pantalla mire a su cara
-                        0
-                    );
+
+                    // Leer config guardada o usar valores por defecto
+                    const tabletCfg = currentConfig.items?.tablet || {};
+                    const pos = tabletCfg.position || { x: 0.02, y: 0.06, z: 0.03 };
+                    const rot = tabletCfg.rotation || { x: -0.52, y: 2.24, z: 0 };
+                    const scl = tabletCfg.scale || 1.0;
+
+                    tabletModel.position.set(pos.x, pos.y, pos.z);
+                    tabletModel.rotation.set(rot.x, rot.y, rot.z);
+                    tabletModel.scale.setScalar(scl * 0.08); // 0.08 es la escala base del modelo GLB
                 }
             }
 
@@ -1283,30 +1389,57 @@
                 console.log('[VRM] Modelo cargado exitosamente');
 
 
-                // Wheel para escala (Zoom) - Siempre activo o con Ctrl
+                // Wheel para escala (Zoom) o rotacion de items
                 window.addEventListener('wheel', (e) => {
-                    // Si shift está presionado, o estamos en modo config, permitimos zoom
+                    // Modo ajuste de items: scroll rota la tablet
+                    if (itemConfigMode && tabletModel && tabletModel.visible) {
+                        e.preventDefault();
+                        const step = e.deltaY > 0 ? -0.05 : 0.05;
+
+                        if (e.shiftKey) {
+                            // Shift + Scroll = rotar eje X
+                            tabletModel.rotation.x += step;
+                        } else if (e.ctrlKey) {
+                            // Ctrl + Scroll = rotar eje Z
+                            tabletModel.rotation.z += step;
+                        } else {
+                            // Scroll solo = rotar eje Y
+                            tabletModel.rotation.y += step;
+                        }
+
+                        // Guardar en config
+                        if (!currentConfig.items) currentConfig.items = {};
+                        if (!currentConfig.items.tablet) currentConfig.items.tablet = {};
+                        currentConfig.items.tablet.rotation = {
+                            x: tabletModel.rotation.x,
+                            y: tabletModel.rotation.y,
+                            z: tabletModel.rotation.z
+                        };
+                        console.log(`[Items] Rotacion tablet: X=${tabletModel.rotation.x.toFixed(2)} Y=${tabletModel.rotation.y.toFixed(2)} Z=${tabletModel.rotation.z.toFixed(2)}`);
+                        scheduleAutoSave();
+                        return;
+                    }
+
+                    // Modo normal: zoom del modelo
                     if (!e.ctrlKey && !configModeEnabled) return;
 
                     e.preventDefault();
-                    // Zoom más suave
                     const delta = e.deltaY > 0 ? -0.1 : 0.1;
                     currentScale = Math.max(0.1, Math.min(5.0, currentScale + delta));
 
                     if (currentVRM) {
                         currentVRM.scene.scale.setScalar(currentScale);
-                        // Ajustar posición para mantener el centro relativo si es necesario,
-                        // por ahora solo escala in-place.
                     }
                     console.log(`[Zoom] Nueva escala: ${currentScale.toFixed(2)}`);
                     scheduleAutoSave();
                 }, { passive: false });
 
-                // Drag del Modelo (Pan) con Clic Derecho
+                // Drag del Modelo (Pan) o movimiento de Items con Clic Derecho
                 let isPanning = false;
                 let panStartX = 0;
                 let panStartY = 0;
                 let modelStartPos = new THREE.Vector3();
+                let itemStartPos = new THREE.Vector3();
 
                 window.addEventListener('mousedown', (e) => {
                     // 2 = Click Derecho
@@ -1314,29 +1447,52 @@
                         isPanning = true;
                         panStartX = e.clientX;
                         panStartY = e.clientY;
-                        if (currentVRM) {
+
+                        if (itemConfigMode && tabletModel && tabletModel.visible) {
+                            // Modo items: guardar posicion inicial de la tablet
+                            itemStartPos.copy(tabletModel.position);
+                        } else if (currentVRM) {
                             modelStartPos.copy(currentVRM.scene.position);
                         }
-                        e.preventDefault(); // Evitar menú contextual a veces
+                        e.preventDefault();
                     }
                 });
 
                 window.addEventListener('mousemove', (e) => {
-                    if (isPanning && currentVRM) {
-                        // Calcular delta en pixeles y convertir a unidades de mundo (aprox)
-                        // Factor de conversión depende de la cámara y distancia
-                        const sensitivity = 0.0025 * (5 / camera.position.z); // Ajuste empírico
+                    if (!isPanning) return;
 
-                        const dx = (e.clientX - panStartX) * sensitivity * 2.5; // X normal
-                        const dy = (e.clientY - panStartY) * sensitivity * 2.5; // Y invertido
+                    if (itemConfigMode && tabletModel && tabletModel.visible) {
+                        // Modo items: mover posicion de la tablet
+                        const sensitivity = 0.0005;
+                        const dx = (e.clientX - panStartX) * sensitivity;
+                        const dy = (e.clientY - panStartY) * sensitivity;
+
+                        tabletModel.position.set(
+                            itemStartPos.x + dx,
+                            itemStartPos.y - dy,
+                            itemStartPos.z
+                        );
+
+                        // Guardar en config
+                        if (!currentConfig.items) currentConfig.items = {};
+                        if (!currentConfig.items.tablet) currentConfig.items.tablet = {};
+                        currentConfig.items.tablet.position = {
+                            x: tabletModel.position.x,
+                            y: tabletModel.position.y,
+                            z: tabletModel.position.z
+                        };
+                    } else if (currentVRM) {
+                        // Modo normal: mover modelo VRM
+                        const sensitivity = 0.0025 * (5 / camera.position.z);
+                        const dx = (e.clientX - panStartX) * sensitivity * 2.5;
+                        const dy = (e.clientY - panStartY) * sensitivity * 2.5;
 
                         currentVRM.scene.position.set(
                             modelStartPos.x + dx,
-                            modelStartPos.y - dy, // ThreeJS Y es arriba
+                            modelStartPos.y - dy,
                             modelStartPos.z
                         );
 
-                        // Guardar config dinámicamente
                         if (!currentConfig.position) currentConfig.position = {};
                         currentConfig.position.x = currentVRM.scene.position.x;
                         currentConfig.position.y = currentVRM.scene.position.y;
@@ -1347,7 +1503,11 @@
                     if (isPanning) {
                         isPanning = false;
                         scheduleAutoSave();
-                        console.log('[Pan] Nueva posición:', currentVRM.scene.position);
+                        if (itemConfigMode) {
+                            console.log('[Items] Nueva posicion tablet:', tabletModel?.position);
+                        } else {
+                            console.log('[Pan] Nueva posicion:', currentVRM?.scene.position);
+                        }
                     }
                 });
 
@@ -1434,6 +1594,32 @@
         window.electronAPI?.onConfigMode((enabled) => {
             configModeEnabled = enabled;
             document.body.classList.toggle('config-mode', enabled);
+        });
+
+        // Modo ajuste de items 3D
+        window.electronAPI?.onItemConfigMode?.((enabled) => {
+            itemConfigMode = enabled;
+            const itemPanel = document.getElementById('item-controls');
+            if (itemPanel) {
+                itemPanel.classList.toggle('show', enabled);
+                // Posicionar al lado opuesto de Yui en la pantalla
+                const screenMid = screen.width / 2;
+                const windowCenter = window.screenX + (window.innerWidth / 2);
+                if (windowCenter > screenMid) {
+                    // Yui esta a la derecha, panel a la izquierda
+                    itemPanel.style.right = 'auto';
+                    itemPanel.style.left = '10px';
+                } else {
+                    // Yui esta a la izquierda, panel a la derecha
+                    itemPanel.style.left = 'auto';
+                    itemPanel.style.right = '10px';
+                }
+            }
+            console.log('[Items] Modo ajuste:', enabled ? 'ACTIVADO' : 'DESACTIVADO');
+            // Al activar, mostrar tablet para poder ajustarla
+            if (enabled && tabletModel && !tabletModel.visible) {
+                startTabletAnimation();
+            }
         });
 
         window.electronAPI?.onDragMode((enabled) => {
@@ -1523,6 +1709,48 @@
                 returnToIdle: false
             });
         });
+
+        // === Funciones globales para controles de items (usadas por onclick en HTML) ===
+        function saveItemConfig() {
+            if (!currentConfig.items) currentConfig.items = {};
+            if (!currentConfig.items.tablet) currentConfig.items.tablet = {};
+            currentConfig.items.tablet.position = {
+                x: tabletModel.position.x,
+                y: tabletModel.position.y,
+                z: tabletModel.position.z
+            };
+            currentConfig.items.tablet.rotation = {
+                x: tabletModel.rotation.x,
+                y: tabletModel.rotation.y,
+                z: tabletModel.rotation.z
+            };
+            currentConfig.items.tablet.scale = tabletModel.scale.x / 0.08;
+            scheduleAutoSave();
+        }
+
+        window.adjustItemPos = function (axis, delta) {
+            if (!tabletModel || !tabletModel.visible) return;
+            tabletModel.position[axis] += delta;
+            console.log(`[Items] Posicion ${axis}: ${tabletModel.position[axis].toFixed(3)}`);
+            saveItemConfig();
+        };
+
+        window.adjustItemRot = function (axis, delta) {
+            if (!tabletModel || !tabletModel.visible) return;
+            tabletModel.rotation[axis] += delta;
+            console.log(`[Items] Rotacion ${axis}: ${tabletModel.rotation[axis].toFixed(3)}`);
+            saveItemConfig();
+        };
+
+        window.adjustItemScale = function (delta) {
+            if (!tabletModel || !tabletModel.visible) return;
+            // Escala actual del modelo (base 0.08 * multiplicador)
+            let currentMultiplier = tabletModel.scale.x / 0.08;
+            currentMultiplier = Math.max(0.1, currentMultiplier + delta);
+            tabletModel.scale.setScalar(currentMultiplier * 0.08);
+            console.log(`[Items] Escala: ${currentMultiplier.toFixed(2)}x`);
+            saveItemConfig();
+        };
 
         window.addEventListener('load', init);
     </script>

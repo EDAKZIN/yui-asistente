@@ -56,6 +56,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onAccessory: (callback) => {
         ipcRenderer.on('accessory', (event, type, enabled) => callback(type, enabled));
     },
+    // Modo ajuste de items 3D (posicion/rotacion de tablet, etc.)
+    onItemConfigMode: (callback) => {
+        ipcRenderer.on('item-config-mode', (event, enabled) => callback(enabled));
+    },
     // Brillo (recibir desde pet window)
     onBrightness: (callback) => {
         ipcRenderer.on('brightness', (event, value) => callback(value));

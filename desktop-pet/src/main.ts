@@ -252,6 +252,14 @@ function createTray(): void {
             }
         },
         {
+            label: 'Ajustar Items',
+            type: 'checkbox',
+            checked: false,
+            click: (menuItem) => {
+                mainWindow?.webContents.send('item-config-mode', menuItem.checked);
+            }
+        },
+        {
             label: 'Arrastrar',
             type: 'checkbox',
             checked: false,

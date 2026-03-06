@@ -31,7 +31,8 @@ Edita `model-config.json` en el directorio padre (`desktop-pet/`) para apuntar a
 }
 ```
 
-> **NOTA**: La posicion `y` controla la altura del modelo en pantalla. Valores mas negativos lo bajan (para que solo se vea la mitad superior como desktop pet).
+> [!NOTE]
+> La posicion `y` controla la altura del modelo en pantalla. Valores mas negativos lo bajan (para que solo se vea la mitad superior como desktop pet).
 
 ---
 

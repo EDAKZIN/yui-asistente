@@ -37,4 +37,5 @@ const miFBX = await fbxLoader.loadAsync('./assets/animations/MiAnimacion.fbx');
 animationClips.miAnimacion = removePositionTracks(retargetAnimation(miFBX, vrm));
 ```
 
-> **NOTA**: `removePositionTracks()` elimina el root motion para que el personaje no se desplace de su posicion.
+> [!NOTE]
+> `removePositionTracks()` elimina el root motion para que el personaje no se desplace de su posicion.
