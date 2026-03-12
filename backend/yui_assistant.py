@@ -141,12 +141,15 @@ class YuiAssistant:
             from groq_llm import GroqLLM
             self.groq = GroqLLM()
             if self.groq.load():
+                # Transferir historial de Llama a Groq antes de descargar
+                self.groq.set_history(self.llama.get_history())
+                
                 # Descargar Llama de VRAM
                 self.logger.info("Activando modo rendimiento: descargando Llama local...")
                 self.llama.unload_model()
                 self.performance_mode = True
                 self.logger.info("Modo rendimiento activado (usando Groq)")
-                return "Modo rendimiento activado. Ahora uso Groq para responder más rápido."
+                return "Modo rendimiento activado. Ahora uso Groq para responder mas rapido."
             else:
                 return "No pude activar el modo rendimiento. Revisa la API key de Groq."
         except Exception as e:
@@ -164,8 +167,9 @@ class YuiAssistant:
             self.llama.load_model()
             self.performance_mode = False
             
-            # Liberar Groq
+            # Transferir historial de Groq a Llama
             if self.groq:
+                self.llama.set_history(self.groq.get_history())
                 self.groq.unload()
                 self.groq = None
             

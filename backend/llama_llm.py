@@ -9,6 +9,42 @@ import re
 from pathlib import Path
 from typing import List, Dict, Optional
 
+# Umbral de intercambios antes de resumir (20 intercambios = 40 mensajes)
+SUMMARY_THRESHOLD = 40
+# Mensajes recientes a conservar al resumir (5 intercambios = 10 mensajes)
+KEEP_RECENT = 10
+
+
+def _clean_response(text: str) -> str:
+    """Limpia y asegura que la respuesta no quede cortada a mitad de oracion"""
+    if not text:
+        return "Lo siento, tuve un problema. ¿Podrias intentar de nuevo?"
+    
+    # Remover prefijos de rol que pueda generar el modelo
+    for prefix in ["assistant:", "Assistant:", "Yui:"]:
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+    
+    # Remover expresiones tipo *sonrie*, *mantiene postura*, etc.
+    text = re.sub(r'\*[^*]+\*', '', text).strip()
+    # Limpiar espacios multiples
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    if not text:
+        return "Lo siento, tuve un problema. ¿Podrias intentar de nuevo?"
+    
+    # Verificar si termina con puntuacion de cierre
+    if text[-1] in '.!?)"\'':
+        return text
+    
+    # Buscar la ultima oracion completa
+    last_period = max(text.rfind('.'), text.rfind('!'), text.rfind('?'))
+    if last_period > len(text) * 0.3:
+        return text[:last_period + 1]
+    
+    # Sin punto en posicion razonable, agregar puntos suspensivos
+    return text + "..."
+
 # Decorador para tracking de memoria (opcional)
 try:
     from diagnostics.decorators import track_memory
@@ -33,7 +69,7 @@ class LlamaLLM:
         top_p: float = 0.9,
         device: str = "cuda",
         n_gpu_layers: int = -1,
-        n_ctx: int = 2048
+        n_ctx: int = 4096
     ):
         """
         Inicializa Llama LLM con llama-cpp-python (GGUF)
@@ -141,42 +177,47 @@ class LlamaLLM:
             # Construir mensajes
             messages = [{"role": "system", "content": system_prompt}]
             
-            # Agregar historial si esta habilitado
+            # Agregar historial si esta habilitado (hasta 25 intercambios)
             if use_history and self.conversation_history:
-                # Limitar historial a ultimos 2 turnos (4 mensajes) para reducir KV Cache
-                recent_history = self.conversation_history[-4:]
-                messages.extend(recent_history)
+                messages.extend(self.conversation_history)
             
             # Agregar mensaje actual
             messages.append({"role": "user", "content": user_input})
             
-            logger.info(f"  Generando (max {min(self.max_length, 80)} tokens nuevos)...")
+            # Proteccion de overflow: recortar historial si excede contexto
+            # Estimacion: ~4 chars por token en español
+            total_chars = sum(len(m["content"]) for m in messages)
+            estimated_tokens = total_chars // 3 + self.max_length
+            
+            while estimated_tokens > self.n_ctx and len(messages) > 3:
+                # Buscar y remover el mensaje de historial mas viejo (indice 1, despues del system)
+                # Remover de a pares (user + assistant) para mantener coherencia
+                removed = False
+                for i in range(1, len(messages) - 1):
+                    if messages[i]["role"] in ("user", "assistant"):
+                        msg = messages.pop(i)
+                        total_chars -= len(msg["content"])
+                        estimated_tokens = total_chars // 3 + self.max_length
+                        removed = True
+                        break
+                if not removed:
+                    break
+            
+            logger.info(f"  Generando (max {self.max_length} tokens, historial: {len(self.conversation_history)} msgs, prompt: ~{estimated_tokens} tokens)...")
             
             # Generar respuesta usando chat completion
+            # max_length es el techo de seguridad; el modelo genera EOS al terminar
             response = self.model.create_chat_completion(
                 messages=messages,
-                max_tokens=min(self.max_length, 80),  # Respuestas cortas
+                max_tokens=self.max_length,
                 temperature=self.temperature,
                 top_p=self.top_p,
                 repeat_penalty=1.1
             )
             
-            # Extraer contenido de la respuesta
-            result = response['choices'][0]['message']['content'].strip()
-            
-            # Limpiar respuesta
-            if result:
-                # Remover cualquier prefijo de rol que pueda aparecer
-                for prefix in ["assistant:", "Assistant:", "Yui:"]:
-                    if result.startswith(prefix):
-                        result = result[len(prefix):].strip()
-                
-                # Remover expresiones tipo *sonrie*, *mantiene postura*, etc.
-                # El modelo no deberia generar estas, las expresiones son automaticas via Live2D
-                result = re.sub(r'\*[^*]+\*', '', result).strip()
-                
-                # Limpiar espacios multiples que puedan quedar
-                result = re.sub(r'\s+', ' ', result).strip()
+            # Extraer y limpiar respuesta (corte limpio si se trunco)
+            raw_result = response['choices'][0]['message']['content'].strip()
+            result = _clean_response(raw_result)
             
             logger.info(f" Respuesta: '{result[:60]}...'")
             
@@ -190,6 +231,10 @@ class LlamaLLM:
                     "role": "assistant",
                     "content": result
                 })
+                
+                # Verificar si hay que resumir el historial
+                if len(self.conversation_history) >= SUMMARY_THRESHOLD:
+                    self._summarize_history()
             
             return result
             
@@ -286,6 +331,56 @@ class LlamaLLM:
             except Exception as e:
                 logger.error(f" Error al descargar modelo: {e}")
     
+    def _summarize_history(self):
+        """Resume el historial cuando crece demasiado, usando el propio modelo local"""
+        if self.model is None:
+            return
+        
+        try:
+            # Separar: mensajes viejos a resumir vs recientes a conservar
+            old_messages = self.conversation_history[:-KEEP_RECENT]
+            recent_messages = self.conversation_history[-KEEP_RECENT:]
+            
+            # Formatear historial viejo para el resumen
+            history_text = ""
+            for msg in old_messages:
+                role = "Usuario" if msg["role"] == "user" else "Yui"
+                history_text += f"{role}: {msg['content']}\n"
+            
+            # Pedir resumen al modelo local
+            summary_response = self.model.create_chat_completion(
+                messages=[{
+                    "role": "system",
+                    "content": (
+                        "Resume la siguiente conversacion en maximo 3 oraciones. "
+                        "Captura los temas principales, datos importantes y el tono general. "
+                        "Responde SOLO con el resumen, sin introducciones."
+                    )
+                }, {
+                    "role": "user",
+                    "content": history_text
+                }],
+                max_tokens=200,
+                temperature=0.3
+            )
+            
+            summary = summary_response['choices'][0]['message']['content'].strip()
+            
+            # Reconstruir historial: resumen + mensajes recientes
+            self.conversation_history = [
+                {"role": "system", "content": f"[Resumen de conversacion anterior]: {summary}"}
+            ] + recent_messages
+            
+            logger.info(
+                f"Historial resumido: {len(old_messages)} msgs -> 1 resumen + "
+                f"{len(recent_messages)} recientes"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error resumiendo historial: {e}")
+            # Fallback: conservar solo los recientes sin resumen
+            self.conversation_history = self.conversation_history[-KEEP_RECENT:]
+    
     def clear_history(self):
         """Limpia el historial de conversacion y resetea KV cache"""
         self.conversation_history = []
@@ -304,3 +399,8 @@ class LlamaLLM:
     def get_history(self) -> List[Dict[str, str]]:
         """Retorna el historial de conversacion"""
         return self.conversation_history.copy()
+    
+    def set_history(self, history: List[Dict[str, str]]):
+        """Establece el historial de conversacion (para sincronizacion entre modos)"""
+        self.conversation_history = history.copy()
+        logger.info(f"Historial sincronizado: {len(self.conversation_history)} mensajes")
