@@ -179,6 +179,11 @@ class TTSEngine:
         logger.info(f"Sintetizando: '{log_text}'")
         
         try:
+            # Detener cualquier reproduccion previa para limpiar buffer
+            if self._is_playing:
+                logger.info("  Deteniendo sintesis previa antes de nueva...")
+                self.stream.stop()
+            
             self._is_playing = True
             self.stream.feed(text)
             self.stream.play()
@@ -197,14 +202,15 @@ class TTSEngine:
             raise
     
     def stop(self):
-        """Detiene la reproducción actual"""
-        if self.stream and self._is_playing:
+        """Detiene la reproducción actual y limpia el buffer"""
+        if self.stream:
             try:
                 self.stream.stop()
                 self._is_playing = False
                 logger.info("Reproducción detenida")
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Error al detener stream: {e}")
+                self._is_playing = False
     
     def shutdown(self):
         """Libera recursos"""

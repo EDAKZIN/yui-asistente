@@ -354,6 +354,11 @@ class ContinuousListener:
         if self.state_machine.is_sleeping:
             return
         
+        # Interrumpir TTS si esta hablando (el usuario quiere hablar)
+        if hasattr(self.yui, 'tts') and self.yui.tts.is_playing():
+            logger.info("Usuario interrumpio - deteniendo TTS")
+            self.yui.tts.stop()
+        
         logger.debug("Inicio de habla detectado")
         self.state_machine.transition_to(YuiState.LISTENING)
         print("\n[ESCUCHANDO...]")
