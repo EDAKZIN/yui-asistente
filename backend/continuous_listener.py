@@ -354,15 +354,11 @@ class ContinuousListener:
         if self.state_machine.is_sleeping:
             return
         
-        # Interrumpir TTS si esta hablando (el usuario quiere hablar)
-        if hasattr(self.yui, 'tts') and self.yui.tts.is_playing():
-            logger.info("Usuario interrumpio - deteniendo TTS")
-            self.yui.tts.stop()
-        
         logger.debug("Inicio de habla detectado")
         self.state_machine.transition_to(YuiState.LISTENING)
         print("\n[ESCUCHANDO...]")
     
+
     def _on_reminder_triggered(self, reminder):
         """Callback cuando un recordatorio se activa"""
         logger.info(f"Recordatorio activado: {reminder.message}")
@@ -476,6 +472,20 @@ No uses asteriscos ni descripciones de acciones."""
         """Callback cuando termina el habla"""
         if self.state_machine.is_sleeping:
             return
+        
+        speech_duration = len(audio) / 16000
+        tts_active = hasattr(self.yui, 'tts') and self.yui.tts.is_playing()
+        
+        # Si Yui esta hablando, solo interrumpir si el usuario hablo 5+ segundos
+        # Menos de 5s se ignora completamente (ruido, comentarios cortos, aire)
+        if tts_active:
+            if speech_duration >= 5.0:
+                logger.info(f"Habla de {speech_duration:.1f}s detectada - interrumpiendo TTS")
+                self.yui.tts.stop()
+            else:
+                logger.debug(f"Habla de {speech_duration:.1f}s ignorada (TTS activo, umbral 5s)")
+                self.state_machine.transition_to(YuiState.ACTIVE)
+                return
         
         logger.info(f"Habla completada: {len(audio)} samples ({len(audio)/16000:.2f}s)")
         
