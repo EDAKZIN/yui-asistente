@@ -323,6 +323,19 @@ class YuiAssistant:
                 self._pending_app_confirmation = pending_app  # Restaurar
                 return f"No entendí, ¿querías abrir {pending_app}? Dime sí o no."
         
+        # Gatekeeper NLP: filtrar antes de evaluar regex para evitar falsos positivos
+        # Si yui_nlp no esta instalado, el flujo continua igual que antes
+        try:
+            import yui_nlp
+            nlp_result = yui_nlp.classify(text_lower)
+            if not nlp_result.is_command:
+                self.logger.debug(f"Gatekeeper: texto clasificado como chat, saltando regex")
+                return self._respond_with_llm(transcript)
+            else:
+                self.logger.debug(f"Gatekeeper: comando detectado ({nlp_result.category}, conf={nlp_result.confidence:.2f})")
+        except ImportError:
+            pass
+        
         # Detectar comandos de modo rendimiento
         if any(phrase in text_lower for phrase in ['modo rendimiento', 'modo de rendimiento', 'modo rápido', 'modo rapido', 'modo turbo', 'activa groq', 'usa groq']):
             self.logger.info("Comando detectado: activar modo rendimiento")
@@ -407,15 +420,17 @@ Responde brevemente usando esta información."""
                 else:
                     return search_results
         
-        
-        # Conversación normal - usar LLM con filtrado inteligente de memoria
+        # Conversación normal - usar LLM
+        return self._respond_with_llm(transcript)
+    
+    def _respond_with_llm(self, transcript: str) -> str:
+        """Genera respuesta del LLM con filtrado inteligente de memoria a largo plazo"""
         long_term_ctx = ""
         if should_query_long_term_memory(transcript, self.memory.session_history):
             long_term_ctx = self.memory.search_relevant_context(transcript, n_results=3)
             if long_term_ctx:
                 logger.debug(f"ChromaDB consultado: {len(long_term_ctx)} chars")
         
-        # Si hay contexto de largo plazo, incluirlo en el prompt
         if long_term_ctx:
             enriched_prompt = f"[Recuerdos relevantes]:\n{long_term_ctx}\n\n{transcript}"
             return self.get_current_llm().generate_response(enriched_prompt)

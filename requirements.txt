@@ -1,6 +1,6 @@
 # Yui AI Assistant - Backend Principal
-# Version: 6.2.0 (LLM GGUF Abliterated)
-# Actualizado: 2026-01-16
+# Version: 7.2.0 (NLP Gatekeeper + GGUF Abliterated)
+# Actualizado: 2026-03-28
 #
 # NOTA: El TTS esta aislado en tts-service/venv_tts/
 # Este requirements es SOLO para el backend principal
@@ -62,6 +62,10 @@ AppOpener>=1.7
 # VAD + Wake Word
 openwakeword>=0.5.0
 openai-whisper>=20250625  # Wake word detector (OpenAI Whisper base)
+
+# NLP Gatekeeper (Rust, filtra falsos positivos antes de regex)
+# Instalar manualmente: pip install https://github.com/EDAKZIN/yui-nlp/releases/download/v0.2.0/yui_nlp-0.2.0-cp311-cp311-win_amd64.whl
+# yui_nlp>=0.2.0  # Instalacion manual desde GitHub release
 
 # WebSocket (comunicacion con Electron y TTS Service)
 websockets>=12.0

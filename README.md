@@ -12,6 +12,7 @@
 - **TTS con clonacion de voz**: Coqui XTTS v2
 - **Memoria selectiva**: ChromaDB con filtrado inteligente
 - **Comandos de voz**: Abrir apps, hora, fecha, busqueda web
+- **NLP Gatekeeper**: Filtro Rust (yui_nlp) que elimina falsos positivos en comandos
 - **Busqueda web**: Brave Search API con contexto de fecha
 - **Personalidad unica**: Amigable por defecto, sarcastica si la provocan
 - **Desktop Pet**: Modelo 3D VRM con Electron + Three.js + Panel de Control
@@ -28,8 +29,8 @@
 ## 🚀 Pipeline
 
 ```
-Usuario → faster-whisper → Comandos/LLM → Emociones → XTTS v2 → Audio
-  habla    (medium INT8)    (detecta)     (expresion)  (clonada)    (respuesta)
+Usuario → faster-whisper → yui_nlp (gatekeeper) → Comandos/LLM → Emociones → XTTS v2 → Audio
+  habla    (medium INT8)    (Rust, microsegundos)   (detecta)     (expresion)  (clonada)    (respuesta)
 ```
 
 ## 📋 Requisitos
@@ -77,6 +78,9 @@ pip install -r requirements.txt
 # Configurar variables de entorno
 copy .env.example .env
 # Edita .env y agrega tu BRAVE_API_KEY y GROQ_API_KEY
+
+# Instalar NLP Gatekeeper (Mejora precision de comandos)
+pip install https://github.com/EDAKZIN/yui-nlp/releases/download/v0.2.0/yui_nlp-0.2.0-cp311-cp311-win_amd64.whl
 ```
 
 ### TTS Microservicio
@@ -272,6 +276,7 @@ Edita `config.json` para ajustar:
 | Búsqueda Web | Brave Search API |
 | Memoria | ChromaDB + Sentence Transformers |
 | Comandos | AppOpener |
+| NLP Gatekeeper | yui_nlp (Rust + Aho-Corasick via PyO3) |
 | Backend | PyTorch 2.6 + CUDA 12.4 + llama-cpp-python (CUDA 12.1) |
 | TTS Service | PyTorch 2.2.2 + DeepSpeed 0.13.1 (proceso separado) |
 | GUI | Electron + Three.js + @pixiv/three-vrm |
@@ -305,4 +310,4 @@ Apps bloqueadas por seguridad: cmd, powershell, regedit, taskmgr, diskpart, y m�
 MIT License - Creado por **EDAKZIN** 🚀
 
 ---
-**Versión 7.1.0** - Última actualización: 2026-03-06
+**Versión 7.2.0** - Última actualización: 2026-03-28
