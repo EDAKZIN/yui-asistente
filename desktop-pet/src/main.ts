@@ -161,6 +161,7 @@ function createControlWindow(): void {
         resizable: true,
         frame: true,
         title: 'Yui - Panel de Control',
+        icon: path.join(__dirname, '..', 'assets', 'icons', 'icon.png'),
         backgroundColor: '#1a1a1a',
         webPreferences: {
             nodeIntegration: false,
@@ -187,14 +188,16 @@ function createControlWindow(): void {
 }
 
 function createTray(): void {
-    const iconPath = path.join(__dirname, '..', 'icon.png');
+    // Usamos el icono específico generado para la bandeja
+    const iconPath = path.join(__dirname, '..', 'assets', 'icons', 'tray-icon.png');
 
     try {
         let trayIcon: Electron.NativeImage;
         if (isMac) {
             trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
         } else {
-            trayIcon = nativeImage.createFromPath(iconPath);
+            // Forzamos el redimensionado en Windows para evitar los márgenes excesivos que mete el OS
+            trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 32, height: 32 });
         }
         tray = new Tray(trayIcon);
     } catch {

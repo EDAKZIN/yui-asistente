@@ -27,11 +27,15 @@
     "build": {
         "appId": "com.yui.desktop-pet",
         "productName": "Yui Desktop Pet",
+        "win": {
+            "icon": "assets/icons/icon.ico"
+        },
         "files": [
             "dist/**/*",
             "index.html",
             "control-panel.html",
             "control-panel.css",
+            "assets/**/*",
             "models/**/*",
             "model-config.json"
         ]
