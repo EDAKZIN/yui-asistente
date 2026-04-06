@@ -14,7 +14,7 @@
         "surprise": "surprised",
         "neutral": "neutral"
     },
-    "lipSync": [
+    "mouthMorphs": [
         "aa",
         "ih",
         "ou",

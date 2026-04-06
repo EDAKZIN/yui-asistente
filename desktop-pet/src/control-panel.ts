@@ -196,6 +196,11 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                     elements.brightnessSlider.value = brightness.toString();
                     elements.brightnessValue.textContent = Math.round(brightness * 100) + '%';
                 }
+
+                // Sincronizar checkbox de comentarios proactivos
+                if (message.data.proactive_enabled !== undefined) {
+                    elements.proactiveEnabled.checked = message.data.proactive_enabled;
+                }
             }
             break;
 

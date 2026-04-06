@@ -78,7 +78,7 @@ class YuiGUIAPI:
             'is_performance_mode': is_performance_mode,
             'mute_key': self._mute_key,
             'vad_threshold': 0.65,
-            'proactive_enabled': True,
+            'proactive_enabled': getattr(self.listener, 'proactive_enabled', True) if self.listener else True,
             # Estados de "Más Opciones"
             'options': {
                 'memory_monitoring': getattr(self, '_memory_monitoring_enabled', False),

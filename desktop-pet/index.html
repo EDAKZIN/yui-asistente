@@ -498,16 +498,18 @@
         let currentLookY = 0;
         const LERP_SPEED = 0.08;
 
-        // Lip-sync
-        let isSpeaking = false;
-        let currentUtteranceId = null;
-        let smoothedMouthOpen = 0;
-        const LIP_LERP_SPEED = 0.3;
-
         // Blink y Breath (timers para update)
         let blinkTimer = 0;
         let nextBlinkTime = 3 + Math.random() * 4;
         let breathTimer = 0;
+
+        // Sistema de expresiones suaves (transicion gradual con lerp)
+        const expressionTargets = {};
+        const expressionCurrents = {};
+        const EXPRESSION_LERP_SPEED = 0.06;
+        let ALL_EXPRESSIONS = [];
+        let expressionDecayTimer = null;
+        const EXPRESSION_DECAY_SECONDS = 5;
 
         // Sistema de subtítulos
         let ws = null;
@@ -655,24 +657,48 @@
             }
         }
 
-        // === VRM: Lip-sync ===
-        function updateLipSync() {
+        // === VRM: Transiciones suaves de expresiones ===
+        function updateExpressionTransitions() {
             if (!currentVRM?.expressionManager) return;
 
-            // Si está hablando pero no recibe frames de audio, simular
-            if (isSpeaking && smoothedMouthOpen < 0.05) {
-                // Generar onda sinusoidal para simular movimiento de boca
-                const t = performance.now() / 1000;
-                const simulated = (Math.sin(t * 12) + 1) / 2 * 0.6 +
-                    (Math.sin(t * 7) + 1) / 2 * 0.3;
-                smoothedMouthOpen = simulated;
+            for (const exp of ALL_EXPRESSIONS) {
+                const target = expressionTargets[exp] || 0;
+                const current = expressionCurrents[exp] || 0;
+                const newVal = current + (target - current) * EXPRESSION_LERP_SPEED;
+
+                // Evitar micro-valores residuales
+                expressionCurrents[exp] = Math.abs(newVal) < 0.005 ? 0 : newVal;
+                currentVRM.expressionManager.setValue(exp, expressionCurrents[exp]);
+            }
+        }
+
+        // Establece la expresion objetivo (la transicion la hace updateExpressionTransitions)
+        function setTargetExpression(name) {
+            // Cancelar decay anterior
+            if (expressionDecayTimer) {
+                clearTimeout(expressionDecayTimer);
+                expressionDecayTimer = null;
             }
 
-            // Aplicar smoothedMouthOpen a expresión 'aa'
-            currentVRM.expressionManager.setValue('aa', smoothedMouthOpen);
+            // Resolver alias desde model-config.json (ej: fear -> surprised)
+            const expressionMap = currentConfig?.expressions || {};
+            const resolvedName = expressionMap[name] || name;
 
-            // Si está hablando, reducir peso de otras expresiones
-            // (se maneja en setEmotion)
+            ALL_EXPRESSIONS.forEach(exp => {
+                expressionTargets[exp] = 0;
+            });
+            if (resolvedName && resolvedName !== 'neutral') {
+                expressionTargets[resolvedName] = 0.6;
+
+                // Auto-reset a neutral despues de unos segundos
+                expressionDecayTimer = setTimeout(() => {
+                    ALL_EXPRESSIONS.forEach(exp => {
+                        expressionTargets[exp] = 0;
+                    });
+                    console.log('[Expresion] Decay a neutral');
+                }, EXPRESSION_DECAY_SECONDS * 1000);
+            }
+            console.log('[Expresion] Target:', name, resolvedName !== name ? `(-> ${resolvedName})` : '');
         }
 
         // === VRM: Aplicar postura según emoción ===
@@ -1066,7 +1092,7 @@
 
             // Siempre activos independientemente del modo
             updateBlink(delta);
-            updateLipSync();
+            updateExpressionTransitions();
 
             // Update VRM internals (SpringBones, etc)
             if (currentVRM) {
@@ -1157,10 +1183,7 @@
                         // TTS INICIA - mostrar subtítulo sincronizado con audio
                         const text = message.data?.text || '';
 
-                        // Lip-sync: guardar utteranceId y marcar como hablando
-                        currentUtteranceId = message.data?.utteranceId || null;
-                        isSpeaking = true;
-                        smoothedMouthOpen = 0;
+                        // (lip-sync desactivado)
 
                         if (text) {
                             console.log('[Subtítulos] TTS iniciando, mostrando:', text);
@@ -1185,46 +1208,16 @@
                         }
                     }
                     else if (message.type === 'tts_complete') {
-                        // TTS completó - resetear lip-sync
                         console.log('[Subtítulos] TTS completado');
-                        if (message.data?.utteranceId === currentUtteranceId) {
-                            isSpeaking = false;
-                            smoothedMouthOpen = 0;
-                            currentUtteranceId = null;
-                        }
                     }
                     else if (message.type === 'set_expression') {
-                        // Cambiar expresion del modelo VRM
                         const expressionName = message.data?.name || '';
                         if (currentVRM?.expressionManager && expressionName) {
-                            try {
-                                // Resetear expresiones primero
-                                ['happy', 'sad', 'angry', 'surprised', 'neutral'].forEach(exp => {
-                                    currentVRM.expressionManager.setValue(exp, 0);
-                                });
-
-                                // Aplicar nueva expresion si no es neutral
-                                if (expressionName !== 'neutral') {
-                                    const weight = isSpeaking ? 0.3 : 0.7;
-                                    currentVRM.expressionManager.setValue(expressionName, weight);
-                                    console.log('[Expresion] VRM aplicada:', expressionName, 'peso:', weight);
-                                } else {
-                                    console.log('[Expresion] VRM reset a neutral');
-                                }
-
-                                // Aplicar postura corporal
-                                applyPosturePreset(expressionName);
-                            } catch (e) {
-                                console.error('[Expresion] Error aplicando VRM:', e);
-                            }
+                            setTargetExpression(expressionName);
+                            applyPosturePreset(expressionName);
                         }
                     }
-                    else if (message.type === 'lipsync_frame') {
-                        // Lip-sync desde TTS microservicio
-                        if (message.utteranceId === currentUtteranceId) {
-                            smoothedMouthOpen += (message.mouthOpen - smoothedMouthOpen) * LIP_LERP_SPEED;
-                        }
-                    }
+                    // lipsync_frame desactivado
                 } catch (e) {
                     console.error('[Subtítulos] Error:', e);
                 }
@@ -1353,9 +1346,10 @@
                 if (vrm.expressionManager) {
                     const presets = Object.keys(vrm.expressionManager.presetExpressionMap || {});
                     const customs = Object.keys(vrm.expressionManager.customExpressionMap || {});
-                    console.log('[VRM] Expresiones disponibles:');
-                    console.log('  Presets:', presets);
-                    console.log('  Custom:', customs);
+                    // Poblar la lista global de expresiones desde el modelo
+                    const reserved = ['blink', 'blinkLeft', 'blinkRight', 'aa', 'ih', 'ou', 'ee', 'oh', 'lookUp', 'lookDown', 'lookLeft', 'lookRight'];
+                    ALL_EXPRESSIONS = [...presets, ...customs].filter(e => !reserved.includes(e));
+                    console.log('[VRM] Expresiones disponibles:', ALL_EXPRESSIONS);
                 }
 
                 // Ajustar posición y escala
@@ -1660,29 +1654,8 @@
                 console.log('[Expression] Error: VRM no cargado');
                 return;
             }
-            console.log('[Expression] Aplicando:', name || 'neutral');
-            try {
-                // Primero resetear todas las expresiones
-                const expressions = ['happy', 'sad', 'angry', 'surprised', 'neutral'];
-                expressions.forEach(exp => {
-                    currentVRM.expressionManager.setValue(exp, 0);
-                });
-
-                // Aplicar nueva expresión
-                if (name && name !== 'neutral') {
-                    // Peso reducido si está hablando (lip-sync tiene prioridad)
-                    const weight = isSpeaking ? 0.3 : 0.7;
-                    currentVRM.expressionManager.setValue(name, weight);
-                    console.log('[Expression] Aplicada:', name, 'peso:', weight);
-                } else {
-                    console.log('[Expression] Reset a neutral');
-                }
-
-                // Aplicar postura corporal según emoción
-                applyPosturePreset(name || 'neutral');
-            } catch (e) {
-                console.error('[Expression] Error:', e);
-            }
+            setTargetExpression(name || 'neutral');
+            applyPosturePreset(name || 'neutral');
         });
 
 
