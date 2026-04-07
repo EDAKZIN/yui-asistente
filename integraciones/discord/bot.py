@@ -118,6 +118,14 @@ class YuiDiscordBot:
         if message.author == self.client.user or message.author.bot:
             return
 
+        # Comando owner para apagar el bot
+        if str(message.author.id) == str(self.owner_id) and message.content.strip().lower() == '/apagar':
+            await message.channel.send("Entendido, me iré a descansar un rato... 💤 (Apagando bot de Discord)")
+            logger.info("Comando /apagar recibido. Apagando el bot de Discord...")
+            await self.client.close()
+            os._exit(0)
+            return
+
         if not self.handler:
             return
 
