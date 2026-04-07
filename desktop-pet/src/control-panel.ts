@@ -75,7 +75,9 @@ const elements = {
     consoleToggleText: document.getElementById('consoleToggleText')!,
     // Brightness
     brightnessSlider: document.getElementById('brightnessSlider') as HTMLInputElement,
-    brightnessValue: document.getElementById('brightnessValue')!
+    brightnessValue: document.getElementById('brightnessValue')!,
+    // Discord
+    discordToggle: document.getElementById('discordToggle') as HTMLInputElement
 };
 
 // WebSocket
@@ -188,6 +190,7 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                     elements.memoryMonitor.checked = opts.memory_monitoring || false;
                     elements.detailedLogs.checked = opts.detailed_logs || false;
                     updateConsoleState(opts.console_visible || false);
+                    elements.discordToggle.checked = opts.discord_active || false;
                 }
 
                 // Sincronizar brillo desde config
@@ -252,6 +255,12 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                 }
                 // Actualizar badge de LLM
                 updateLlmBadge(state.isPerformanceMode);
+            }
+            break;
+
+        case 'discord_changed':
+            if (message.data) {
+                elements.discordToggle.checked = message.data.discord_active || false;
             }
             break;
 
@@ -433,6 +442,11 @@ function setupEventListeners(): void {
     // Detailed Logs toggle
     elements.detailedLogs.addEventListener('change', () => {
         sendAction('set_detailed_logging', { enabled: elements.detailedLogs.checked });
+    });
+
+    // Discord Bot toggle
+    elements.discordToggle.addEventListener('change', () => {
+        sendAction('toggle_discord_bot');
     });
 
     // VAD threshold slider

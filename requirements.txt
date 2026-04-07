@@ -69,3 +69,6 @@ openai-whisper>=20250625  # Wake word detector (OpenAI Whisper base)
 
 # WebSocket (comunicacion con Electron y TTS Service)
 websockets>=12.0
+
+# Integraciones
+discord.py>=2.0  # Bot de Discord (integraciones/discord/)

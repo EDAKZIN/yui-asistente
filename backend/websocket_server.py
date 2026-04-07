@@ -122,6 +122,10 @@ class YuiWebSocketServer:
             elif action == 'get_session_stats':
                 result = self.gui_api.get_session_stats()
             
+            elif action == 'toggle_discord_bot':
+                result = self.gui_api.toggle_discord_bot()
+                await self.broadcast({'type': 'discord_changed', 'data': result})
+            
             elif action == 'toggle_console':
                 result = self.gui_api.toggle_console()
             

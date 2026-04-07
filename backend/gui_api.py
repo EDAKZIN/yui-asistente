@@ -45,8 +45,11 @@ class YuiGUIAPI:
         except Exception as e:
             logger.warning(f"No se pudo cargar mute_key: {e}")
         
-        # Referencia a la ventana (se setea después)
+        # Referencia a la ventana (se setea despues)
         self.window = None
+        
+        # Bot de Discord (modo integrado)
+        self._discord_bot = None
         
         logger.info("GUI API inicializada")
     
@@ -83,7 +86,8 @@ class YuiGUIAPI:
             'options': {
                 'memory_monitoring': getattr(self, '_memory_monitoring_enabled', False),
                 'detailed_logs': getattr(self, '_detailed_logs_enabled', False),
-                'console_visible': self._console_visible
+                'console_visible': self._console_visible,
+                'discord_active': self._discord_bot is not None and self._discord_bot.is_running
             }
         }
         
@@ -379,3 +383,39 @@ class YuiGUIAPI:
     def notify_expression(self, expression_name: str):
         """Notifica cambio de expresion del modelo (override en subclase)"""
         pass
+    
+    # ==================== Discord ====================
+    
+    def toggle_discord_bot(self) -> dict:
+        """Inicia o detiene el bot de Discord en modo integrado"""
+        if self._discord_bot and self._discord_bot.is_running:
+            self._discord_bot.stop()
+            self._discord_bot = None
+            logger.info("Bot de Discord detenido desde GUI")
+            return {'discord_active': False}
+        
+        try:
+            from pathlib import Path
+            import sys as _sys
+            discord_path = str(Path(__file__).parent.parent / 'integraciones' / 'discord')
+            if discord_path not in _sys.path:
+                _sys.path.insert(0, discord_path)
+            
+            from bot import YuiDiscordBot
+            
+            llm = self.yui.get_current_llm() if self.yui else None
+            memory = self.yui.memory if self.yui else None
+            
+            self._discord_bot = YuiDiscordBot(llm=llm, memory=memory)
+            success = self._discord_bot.start_integrated()
+            
+            if success:
+                logger.info("Bot de Discord iniciado desde GUI (modo integrado)")
+            
+            return {'discord_active': success}
+        except ImportError as e:
+            logger.error(f"discord.py no instalado: {e}")
+            return {'discord_active': False, 'error': 'discord.py no instalado'}
+        except Exception as e:
+            logger.error(f"Error iniciando bot Discord: {e}")
+            return {'discord_active': False, 'error': str(e)}

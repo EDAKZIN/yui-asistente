@@ -30,5 +30,9 @@
     },
     "gui": {
         "mute_key": "|"
+    },
+    "discord": {
+        "enabled": false,
+        "owner_id": "697172582700548257"
     }
 }

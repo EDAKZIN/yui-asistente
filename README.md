@@ -1,4 +1,4 @@
-# 🎤 Yui AI Assistant
+# Yui AI Assistant
 
 > [!WARNING]
 > Este es un proyecto personal hecho a mi medida. No esta diseñado para ser plug-and-play. Si quieres usarlo, vas a necesitar adaptar configuraciones, modelos, prompts y assets a tu propio entorno.
@@ -23,8 +23,9 @@
 - **Recordatorios**: Sistema de recordatorios por voz
 - **Comentarios proactivos**: Yui comenta cuando llevas tiempo sin hablar
 - **Modo reposo**: Di "descansa" para liberar VRAM, di "despierta" para despertar
-- **Gestión automática de VRAM**: Los modelos se descargan/cargan según el estado
+- **Gestion automatica de VRAM**: Los modelos se descargan/cargan segun el estado
 - **Configuracion desde tray**: Ajusta escala, subtitulos y mas desde el menu
+- **Integracion Discord**: Bot standalone o integrado que comparte LLM/memoria con el desktop pet
 
 ## 🚀 Pipeline
 
@@ -229,15 +230,20 @@ yui-asistente/
 │       ├── animations/       # Animaciones FBX (Mixamo)
 │       └── items/            # Items 3D (props)
 ├── voice_samples/            # Muestras de voz para clonación
+├── integraciones/            # Integraciones externas
+│   └── discord/
+│       ├── bot.py            # Bot de Discord (standalone/integrado)
+│       └── message_handler.py # Procesamiento mensajes + historial por canal
 ├── logs/
 │   ├── yui.log               # Log de conversaciones
 │   ├── yui_debug.log         # Log de funcionamiento interno
-│   └── tts_process.log       # Log del proceso TTS
+│   ├── tts_process.log       # Log del proceso TTS
+│   └── discord.log           # Log del bot de Discord
 ├── data/chromadb/            # Base de datos de memoria
-├── .env                      # Variables de entorno (API keys)
-├── config.json               # Configuración
+├── .env                      # Variables de entorno (API keys, tokens)
+├── config.json               # Configuracion
 ├── run_electron.py           # Lanzador principal
-├── start_yui.bat             # Script de inicio rápido
+├── start_yui.bat             # Script de inicio rapido
 └── requirements.txt          # Dependencias Python
 ```
 
@@ -281,6 +287,7 @@ Edita `config.json` para ajustar:
 | TTS Service | PyTorch 2.2.2 + DeepSpeed 0.13.1 (proceso separado) |
 | GUI | Electron + Three.js + @pixiv/three-vrm |
 | Animaciones | Mixamo FBX + vrm-mixamo-retarget |
+| Discord | discord.py 2.x (bot standalone o integrado) |
 
 ## 📊 Rendimiento
 
@@ -298,6 +305,7 @@ Edita `config.json` para ajustar:
 |---------|-----------|
 | `logs/yui.log` | Conversaciones (INFO+) |
 | `logs/yui_debug.log` | Funcionamiento interno (DEBUG) |
+| `logs/discord.log` | Bot de Discord (INFO+) |
 
 Los logs se reinician en cada ejecución.
 
@@ -307,7 +315,7 @@ Apps bloqueadas por seguridad: cmd, powershell, regedit, taskmgr, diskpart, y m�
 
 ## 📄 Licencia
 
-MIT License - Creado por **EDAKZIN** 🚀
+MIT License - Creado por **EDAKZIN**
 
 ---
-**Versión 7.2.0** - Última actualización: 2026-03-28
+**Version 7.3.0** - Ultima actualizacion: 2026-04-07
