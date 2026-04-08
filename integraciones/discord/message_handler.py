@@ -25,6 +25,7 @@ def _clean_response(text: str) -> str:
         if text.startswith(prefix):
             text = text[len(prefix):].strip()
 
+    text = re.sub(r'\[usuario:\s*\w+\]\s*', '', text).strip()
     text = re.sub(r'\*[^*]+\*', '', text).strip()
     text = re.sub(r'\s+', ' ', text).strip()
 

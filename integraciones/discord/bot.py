@@ -83,7 +83,14 @@ class YuiDiscordBot:
 
         intents = discord.Intents.default()
         intents.message_content = True
-        self.client = discord.Client(intents=intents)
+        activity = discord.CustomActivity(
+            name="Hablando con Edakzin 𖹭"
+        )
+        self.client = discord.Client(
+            intents=intents,
+            activity=activity,
+            status=discord.Status.idle
+        )
 
         self._register_events()
         self.handler = None
