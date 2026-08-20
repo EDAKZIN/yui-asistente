@@ -41,6 +41,7 @@ console.log('====== ELECTRON LOG INICIADO ======');
 let mainWindow: BrowserWindow | null = null;
 let controlWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let alwaysOnTopInterval: NodeJS.Timeout | null = null;
 const isMac = process.platform === 'darwin';
 
 // WebSocket directo al backend (sin pasar por frontend)
@@ -96,6 +97,27 @@ function loadGlobalConfig(): any {
     }
 }
 
+function ensureMainWindowOnTop(): void {
+    const controlIsActive = controlWindow
+        && !controlWindow.isDestroyed()
+        && controlWindow.isVisible()
+        && !controlWindow.isMinimized();
+
+    if (!controlIsActive && mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+        mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    }
+}
+
+function prioritizeControlWindow(): void {
+    if (!controlWindow || controlWindow.isDestroyed()) {
+        return;
+    }
+
+    mainWindow?.setAlwaysOnTop(false);
+    controlWindow.setAlwaysOnTop(true, 'screen-saver');
+    controlWindow.moveTop();
+}
+
 function createWindow(): void {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
     const config = loadConfig();
@@ -126,21 +148,25 @@ function createWindow(): void {
 
     mainWindow.loadFile(path.join(__dirname, '../index.html'));
 
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    ensureMainWindowOnTop();
+
+    mainWindow.once('ready-to-show', ensureMainWindowOnTop);
+    mainWindow.on('show', ensureMainWindowOnTop);
+
+    if (!isMac) {
+        alwaysOnTopInterval = setInterval(ensureMainWindowOnTop, 3000);
+    }
 
     if (isMac) {
         mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     }
 
     mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
-
-    // Re-establecer alwaysOnTop si pierde el nivel (bug de Windows/Electron)
-    mainWindow.on('blur', () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        if (alwaysOnTopInterval) {
+            clearInterval(alwaysOnTopInterval);
+            alwaysOnTopInterval = null;
         }
+        mainWindow = null;
     });
 
     createTray();
@@ -149,6 +175,7 @@ function createWindow(): void {
 function createControlWindow(): void {
     if (controlWindow && !controlWindow.isDestroyed()) {
         controlWindow.show();
+        prioritizeControlWindow();
         controlWindow.focus();
         return;
     }
@@ -173,6 +200,7 @@ function createControlWindow(): void {
 
     controlWindow.loadFile(path.join(__dirname, '../control-panel.html'));
     controlWindow.setMenuBarVisibility(false);
+    prioritizeControlWindow();
 
     // Enviar brillo guardado cuando la ventana esté lista
     controlWindow.webContents.on('did-finish-load', () => {
@@ -182,8 +210,13 @@ function createControlWindow(): void {
         }
     });
 
+    controlWindow.on('show', prioritizeControlWindow);
+    controlWindow.on('restore', prioritizeControlWindow);
+    controlWindow.on('minimize', ensureMainWindowOnTop);
+
     controlWindow.on('closed', () => {
         controlWindow = null;
+        ensureMainWindowOnTop();
     });
 }
 
@@ -217,6 +250,7 @@ function createTray(): void {
                     mainWindow.hide();
                 } else {
                     mainWindow?.show();
+                    ensureMainWindowOnTop();
                 }
             }
         },
