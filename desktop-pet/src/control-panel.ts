@@ -71,8 +71,6 @@ const elements = {
     detailedLogs: document.getElementById('detailedLogs') as HTMLInputElement,
     statUptime: document.getElementById('statUptime')!,
     statConversations: document.getElementById('statConversations')!,
-    consoleToggleBtn: document.getElementById('consoleToggleBtn')!,
-    consoleToggleText: document.getElementById('consoleToggleText')!,
     // Brightness
     brightnessSlider: document.getElementById('brightnessSlider') as HTMLInputElement,
     brightnessValue: document.getElementById('brightnessValue')!,
@@ -189,7 +187,6 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
                     const opts = message.data.options;
                     elements.memoryMonitor.checked = opts.memory_monitoring || false;
                     elements.detailedLogs.checked = opts.detailed_logs || false;
-                    updateConsoleState(opts.console_visible || false);
                     elements.discordToggle.checked = opts.discord_active || false;
                 }
 
@@ -221,9 +218,6 @@ function handleWebSocketMessage(message: { type: string; data?: any; action?: st
             // Manejar respuestas de acciones (como get_session_stats)
             if (message.action === 'get_session_stats' && message.data) {
                 updateSessionStats(message.data);
-            }
-            if (message.action === 'toggle_console' && message.data) {
-                updateConsoleState(message.data.visible);
             }
             break;
 
@@ -387,17 +381,6 @@ function updateSessionStats(stats: { uptime_seconds: number; conversation_count:
     elements.statConversations.textContent = stats.conversation_count.toString();
 }
 
-function setupConsoleToggle(): void {
-    elements.consoleToggleBtn.addEventListener('click', () => {
-        sendAction('toggle_console');
-    });
-}
-
-function updateConsoleState(visible: boolean): void {
-    elements.consoleToggleText.textContent = visible ? 'Ocultar' : 'Mostrar';
-    elements.consoleToggleBtn.classList.toggle('active', visible);
-}
-
 // === Event Listeners ===
 
 function setupEventListeners(): void {
@@ -504,7 +487,6 @@ function init(): void {
     console.log('Inicializando Panel de Control...');
     setupEventListeners();
     setupCategoryCards();
-    setupConsoleToggle();
     connectWebSocket();
 
     // Recibir brillo guardado desde main.ts (via IPC)

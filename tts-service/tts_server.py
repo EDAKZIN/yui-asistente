@@ -128,6 +128,7 @@ class TTSEngine:
                 device=self.device,
                 speed=1.0,
                 temperature=0.75,
+                full_sentences=True,
                 level=logging.WARNING
             )
             
@@ -157,6 +158,7 @@ class TTSEngine:
                 use_deepspeed=False,
                 device=self.device,
                 speed=1.0,
+                full_sentences=True,
                 level=logging.WARNING
             )
             
@@ -186,11 +188,10 @@ class TTSEngine:
             
             self._is_playing = True
             self.stream.feed(text)
-            self.stream.play()
-            
-            # Esperar a que termine
-            while self.stream.is_playing():
-                pass
+            self.stream.play(
+                fast_sentence_fragment=False,
+                language=language
+            )
             
             self._is_playing = False
             logger.info("  Síntesis completada")
